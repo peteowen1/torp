@@ -101,14 +101,12 @@ EPV_PER_CHANNEL_POINTS_SCALE <- FALSE
 
 #' Which EPV engine computes the channels
 #'
-#' \code{v2} is production and is the default: box-score weights plus a
-#' chain-derived part, four channels \code{recv / disp / spoil / hitout}.
-#'
-#' \code{v3} is the chain-native rebuild -- \code{delta_epv} arithmetic only,
-#' with the ruck/hitout box terms as the single permitted carve-out because
-#' \code{Centre Bounce} and \code{Ball Up Call} rows carry a \code{player_id}
-#' 0.0% of the time. Four channels \code{recv / disp / cont_aerial / cont_stop}.
-#' See \code{../docs/plans/EPV-V3-CHAIN-NATIVE.md}.
+#' \strong{\code{"v4"} is the only engine.} \code{v2} (box-score weights plus
+#' a chain-derived part) and \code{v3} (the chain-native rebuild, see
+#' \code{../docs/plans/EPV-V3-CHAIN-NATIVE.md}) were removed on 2026-11-16,
+#' ten weeks after v4 was published; git history keeps them. The constant
+#' stays because it is the first entry of \code{.rating_defining_constants()}
+#' and is stamped on every player-game frame.
 #'
 #' \code{v4} is the Net Points ledger (\code{build_net_points()} under
 #' \code{credit = "difficulty"} with stoppages allocated): every player-match
@@ -117,8 +115,7 @@ EPV_PER_CHANNEL_POINTS_SCALE <- FALSE
 #' plumbing is unchanged; \code{hitout} is zero. See
 #' \code{../docs/plans/EPV-V4-CREDIT-RULES.md}.
 #'
-#' \strong{Flipping this changes every published rating.} It is a flag, not a
-#' tunable: an engine has to clear the gates first (\code{docs/HOW-WE-WORK.md}).
+#' \code{create_player_game_data()} refuses any other value.
 #' @keywords internal
 EPV_ENGINE <- "v4"
 
@@ -140,6 +137,12 @@ EPV_ENGINE <- "v4"
 EPR_UNITS_SCALE_V4 <- 2.40
 
 #' How v3 distributes contest debits whose loser chains never names
+#'
+#' \strong{No longer read by anything (2026-11-16).} Its only reader,
+#' \code{compute_aerial_credit()}, was removed with the v3 engine. It stays
+#' because it is in \code{.rating_defining_constants()}, so removing it would
+#' change the published manifest; it goes in the next rating vintage. The
+#' record below is kept.
 #'
 #' Chains names the beaten aerial opponent in only ~12% of contests -- never
 #' when the attack retains, and only when a \code{Contest Target} row happened to
@@ -186,6 +189,12 @@ EPR_UNITS_SCALE_V4 <- 2.40
 EPV_CONT_LOSS_ALLOC <- "team"
 
 #' How many channels v3 splits EPV into: 4 (default) or 3
+#'
+#' \strong{No longer read by anything (2026-11-16).} It only shaped the v3
+#' channel assembly and v3's hitout prior, both removed with the v3 engine. It
+#' stays because it is in \code{.rating_defining_constants()}, so removing it
+#' would change the published manifest; it goes in the next rating vintage. The
+#' record below is kept.
 #'
 #' Pete's original framing was "3 subsections, maaaybe 4". Both are built.
 #'
@@ -254,24 +263,15 @@ EPV_CONT_LOSS_ALLOC <- "team"
 #' @keywords internal
 EPV3_CHANNELS <- 4L
 
-#' The per-channel points scale for a given engine
+#' Per-channel points constants (1 unit = 1 point of margin)
 #'
-#' The body of \code{EPV3_POINTS_SCALE}, as a function of the engine so a test
-#' can ask what the constant WOULD be under another engine without re-reading
-#' this file from disk (the source tree does not exist under R CMD check).
-#' \code{EPV3_POINTS_SCALE} is exactly \code{.epv3_points_scale()}; see that
-#' constant for what the values mean and where they came from.
-#' @param engine One of the \code{EPV_ENGINE} values. Defaults to the live one.
-#' @keywords internal
-.epv3_points_scale <- function(engine = EPV_ENGINE) {
-  if (identical(engine, "v3")) {
-    c(recv = 1.650438, disp = 1.421199, cont_aerial = 0.337485, cont_stop = 1.659480)
-  } else {
-    c(recv = 1, disp = 1, cont_aerial = 1, cont_stop = 1)
-  }
-}
-
-#' Per-channel points constants for v3 (1 unit = 1 point of margin)
+#' \strong{All 1 under v4, and only read when
+#' \code{EPV_PER_CHANNEL_POINTS_SCALE} is on.} v4 is already in margin points.
+#' The calibrated values below were v3's (\code{1.650438 / 1.421199 / 0.337485
+#' / 1.659480}); they were chosen by a \code{.epv3_points_scale(engine)} helper
+#' that was removed with the v3 engine on 2026-11-16. The constant stays
+#' because it is in \code{.rating_defining_constants()}. The history below is
+#' kept as the record of how v3's scale was fitted.
 #'
 #' v3's channels are separately calibrated, replacing the single global
 #' \code{EPV_POINTS_SCALE}.
@@ -357,7 +357,7 @@ EPV3_CHANNELS <- 4L
 #' is written down now. cont_stop was 1 because the 3-channel merge left the
 #' ruck slot inert; under 4 channels it is a live channel and carries 1.8557.
 #' @keywords internal
-EPV3_POINTS_SCALE <- .epv3_points_scale()
+EPV3_POINTS_SCALE <- c(recv = 1, disp = 1, cont_aerial = 1, cont_stop = 1)
 
 #' Which EPV channel maps onto which entry of EPV3_POINTS_SCALE
 #'
@@ -370,25 +370,6 @@ EPV3_POINTS_SCALE <- .epv3_points_scale()
 EPV_CHANNEL_SCALE_KEYS <- c(epv_recv = "recv", epv_disp = "disp",
                             epv_spoil = "cont_aerial", epv_hitout = "cont_stop")
 
-# NOTE: EPR_PRIOR_GAMES_* live HERE, below EPV_ENGINE, and not up with the other
-# EPR_* constants. They are engine-conditioned, R sources a package file top to
-# bottom, and EPV_ENGINE is defined further down the file than their natural
-# home -- putting them there gives "object 'EPV_ENGINE' not found" at BUILD
-# time. Same hazard the note above EPV_POINTS_SCALE warns about.
-#' Prior games for one channel slot, for a given engine
-#'
-#' The body of the \code{EPR_PRIOR_GAMES_*} constants as a function of the
-#' engine, so a test can read the value under another engine without
-#' re-sourcing this file. See \code{EPR_PRIOR_GAMES_RECV} for what the numbers
-#' mean.
-#' @param slot One of \code{"recv"}, \code{"disp"}, \code{"spoil"}.
-#' @param engine One of the \code{EPV_ENGINE} values. Defaults to the live one.
-#' @keywords internal
-.epr_prior_games <- function(slot, engine = EPV_ENGINE) {
-  v34 <- c(recv = 14.38, disp = 24.33, spoil = 11.09)
-  if (engine %in% c("v3", "v4")) v34[[slot]] else 3.0000
-}
-
 #' How much evidence a channel needs before it stops being shrunk
 #'
 #' \code{prior_games} is the number of weighted games at which a player's own
@@ -398,56 +379,24 @@ EPV_CHANNEL_SCALE_KEYS <- c(epv_recv = "recv", epv_disp = "disp",
 #' v3's chain-delta channels are far noisier than v2's box-score counts, so they
 #' need much more shrinkage.
 #'
-#' \strong{Keyed on \code{EPV_ENGINE}, and that is deliberate.} The v3 numbers
-#' were measured on v3's channels and are meaningless for v2's; applying them to
-#' v2 would change every published rating today for no reason. v2 keeps 3.0 so
-#' production is byte-for-byte untouched while the engine flag stays at
-#' \code{v2}.
-#'
-#' v2's own measured values are 7.75 / 9.12 / 12.19 / 4.18 -- also well above
-#' 3.0, so production is under-shrinking too. That is a separate shippable
-#' change and it has not been gated; do not fold it in here.
+#' \strong{The v3 values, which v4 kept.} Until 2026-11-16 these were chosen
+#' by engine (v2 used 3.0 on every channel); v4 was gated with the v3 numbers,
+#' and the engine switch went with v2 and v3.
 #'
 #' Measured 2026-08-04 on the finished v3 structure over 1,032 players with 3+
 #' games at TOG > 50 (\code{epv3_finalise.R} stage 4). An independent earlier
 #' measurement on the 4-channel v3 build gave 14.38 / 24.35 / 11.37, so these
 #' are stable to the structure change.
 #' @keywords internal
-EPR_PRIOR_GAMES_RECV <- .epr_prior_games("recv")
+EPR_PRIOR_GAMES_RECV <- 14.38
 
 #' Prior games constant for disposal ratings. See \code{EPR_PRIOR_GAMES_RECV}.
 #' @keywords internal
-EPR_PRIOR_GAMES_DISP <- .epr_prior_games("disp")
+EPR_PRIOR_GAMES_DISP <- 24.33
 
 #' Prior games constant for the spoil/contest slot. See \code{EPR_PRIOR_GAMES_RECV}.
 #' @keywords internal
-EPR_PRIOR_GAMES_SPOIL <- .epr_prior_games("spoil")
-
-#' Sub-component scales applied BEFORE the two contest channels merge
-#'
-#' Only used when \code{EPV3_CHANNELS == 3L}. Pete's construction, and it is not
-#' obvious: calibrate \code{cont_aerial} and \code{cont_stop} to one-point-per-
-#' unit \emph{individually}, then add them. The sum then reads one point per
-#' unit too, so the merged contest channel lands on the spec by construction
-#' rather than by luck.
-#'
-#' Merging the RAW components does not get there. A raw sum blends by VARIANCE,
-#' and the aerial part has roughly three times the spread while carrying no
-#' margin signal of its own (t 0.91 against stoppage's 4.29) -- so the ruck
-#' signal is diluted rather than carried, and the merged channel reads 0.570 at
-#' t 1.87. Scaling first makes the merge blend by POINTS: 1.000 at t 4.43.
-#'
-#' This is also why the 3-channel arm previously lost the 3-vs-4 comparison on
-#' bits. That comparison merged the raw components. Merging calibrated ones is a
-#' different operation and has to be re-gated, not inherited.
-#'
-#' Fitted at the EPR layer against xmargin on the FOUR-channel build (the only
-#' structure where the two components are separately visible to EPR), then
-#' applied at the EPV layer, which is linear in each component so the ratio
-#' carries. The overall level is re-fitted afterwards as
-#' \code{EPV3_POINTS_SCALE["cont_aerial"]}, which scales the merged channel.
-#' @keywords internal
-EPV3_SUB_SCALE <- c(cont_aerial = 1, cont_stop = 1)
+EPR_PRIOR_GAMES_SPOIL <- 11.09
 
 #' Correction factor sizing the ruck channel to the swing it stands in for
 #'
@@ -512,108 +461,41 @@ EPV_RUCK_SWING_SCALE <- 1
 #' @keywords internal
 PSV_POINTS_SCALE <- 1.579
 
-#' The points factor a channel's shrinkage prior has to carry
-#'
-#' \code{.bayesian_shrink()} adds \code{prior_games * prior_rate} AFTER the
-#' channel value, so a scaled channel with an unscaled prior leaves EPR a blend
-#' of scaled and unscaled parts rather than a clean rescale. Every
-#' \code{EPR_PRIOR_RATE_*} therefore carries the same factor its channel does.
-#'
-#' Under v2 that factor is the single global \code{EPV_POINTS_SCALE}. Under v3
-#' it is per channel, because v3's whole point is that one unit of each channel
-#' is one point of margin and they convert at very different rates.
-#'
-#' \strong{Keyed on the constant, not on a per-call argument}, so a script that
-#' passes \code{epv_engine = "v3"} while \code{EPV_ENGINE} still reads
-#' \code{v2} gets v2 priors. That is the right default for production and the
-#' wrong one for a two-engine gate, so gate scripts must
-#' \code{assignInNamespace()} the prior rates for their v3 arm. The alternative
-#' -- resolving the prior inside \code{.build_epr_season()} -- would make the
-#' constant no longer a constant.
-#' @param slot Channel slot name, a key of \code{EPV3_POINTS_SCALE}.
-#' @param engine One of the \code{EPV_ENGINE} values. Defaults to the live one.
-#' @keywords internal
-.epr_prior_points_scale <- function(slot, engine = EPV_ENGINE) {
-  # v4 is already in margin points -- the ledger sums to the margin -- so no
-  # per-channel scale applies
-  if (identical(engine, "v4")) return(1)
-  if (identical(engine, "v3")) {
-    .epv3_points_scale("v3")[[slot]]
-  } else {
-    EPV_POINTS_SCALE
-  }
-}
-
-#' Prior rate for one of the recv / disp / spoil slots, for a given engine
-#'
-#' The body of \code{EPR_PRIOR_RATE_RECV}, \code{EPR_PRIOR_RATE_DISP} and
-#' \code{EPR_PRIOR_RATE_SPOIL} as a function of the engine, so a test can read
-#' which points-scale channel each slot carries under another engine without
-#' re-sourcing this file. The slot-to-channel pairing lives here, in one place:
-#' recv carries \code{recv}, disp carries \code{disp}, and the spoil slot
-#' carries \code{cont_aerial}.
-#' @param slot One of \code{"recv"}, \code{"disp"}, \code{"spoil"}.
-#' @param engine One of the \code{EPV_ENGINE} values. Defaults to the live one.
-#' @keywords internal
-.epr_prior_rate <- function(slot, engine = EPV_ENGINE) {
-  base <- c(recv = -0.7000, disp = -0.7000, spoil = -0.3000)
-  channel <- c(recv = "recv", disp = "disp", spoil = "cont_aerial")
-  base[[slot]] * .epr_prior_points_scale(channel[[slot]], engine)
-}
-
+# EPR_PRIOR_RATE_*: until 2026-11-16 each carried its channel's points factor
+# (v2's global EPV_POINTS_SCALE, v3's per-channel scale) through two helpers,
+# .epr_prior_points_scale() and .epr_prior_rate(). v4 is already in margin
+# points, so the factor was 1 and the rates are the plain base values below.
+# .bayesian_shrink() adds prior_games * prior_rate AFTER the channel value, so
+# if a channel is ever rescaled again its prior rate has to carry the same
+# factor.
 #' Prior rate for receiving component (shrinkage target per weighted game)
 #' @keywords internal
-EPR_PRIOR_RATE_RECV <- .epr_prior_rate("recv")
+EPR_PRIOR_RATE_RECV <- -0.7000
 
 #' Prior rate for disposal component (shrinkage target per weighted game)
 #' @keywords internal
-EPR_PRIOR_RATE_DISP <- .epr_prior_rate("disp")
+EPR_PRIOR_RATE_DISP <- -0.7000
 
 #' Prior rate for spoil component (shrinkage target per weighted game)
 #'
-#' Under v3 this slot holds CONTEST value. The shape (-0.3 against recv/disp's
-#' -0.7) is inherited unchanged and only the points factor is threaded, which is
-#' deliberate: whether a mostly zero-sum channel wants a negative prior at all
-#' is a real question, but it is a separate change with its own effect and
-#' bundling it here would make the calibration unattributable.
+#' Under v4 this slot holds the team-pool share (it held contest value under
+#' v3). The -0.3 shape against recv/disp's -0.7 is inherited unchanged.
 #' @keywords internal
-EPR_PRIOR_RATE_SPOIL <- .epr_prior_rate("spoil")
-
-#' Prior rate for the hitout slot, for a given engine
-#'
-#' The body of \code{EPR_PRIOR_RATE_HITOUT} as a function of the engine, so a
-#' test can read the value under another engine without re-sourcing this file.
-#' See \code{EPR_PRIOR_RATE_HITOUT} for why it is zero under v4.
-#' @param engine One of the \code{EPV_ENGINE} values. Defaults to the live one.
-#' @param channels Number of v3 channels. Defaults to \code{EPV3_CHANNELS}.
-#' @keywords internal
-.epr_prior_rate_hitout <- function(engine = EPV_ENGINE, channels = EPV3_CHANNELS) {
-  if (identical(engine, "v4") ||
-      (identical(engine, "v3") && identical(channels, 3L))) {
-    0
-  } else {
-    -0.3000 * .epr_prior_points_scale("cont_stop", engine) * EPV_RUCK_SWING_SCALE
-  }
-}
+EPR_PRIOR_RATE_SPOIL <- -0.3000
 
 #' Prior rate for hitout component (shrinkage target per weighted game)
 #'
-#' Carries \code{EPV_RUCK_SWING_SCALE} for the same reason the others carry
-#' \code{EPV_POINTS_SCALE}: \code{.bayesian_shrink()} adds
-#' \code{prior_games * prior_rate} AFTER the value, so an unscaled prior would leave
-#' the hitout rating a blend of scaled and unscaled parts rather than a clean
-#' rescale. If you change one, change both.
+#' \strong{Zero, because the hitout slot is identically zero under v4.} A
+#' non-zero prior on an all-zero channel would shrink toward it and reintroduce
+#' a level for a channel that does not exist. Until 2026-11-16 it was chosen by
+#' a \code{.epr_prior_rate_hitout(engine, channels)} helper (v2 and 4-channel
+#' v3 used \code{-0.3} times the ruck channel's points factor); that helper
+#' went with those engines.
 #'
-#' Zeroed under the 3-channel v3 arm, where the hitout slot holds nothing. A
-#' non-zero prior on an all-zero channel would shrink toward it and reintroduce a
-#' level for a channel that does not exist. Conditioned on BOTH constants so v2
-#' is untouched whatever \code{EPV3_CHANNELS} says.
-#'
-#' \strong{Also zeroed under v4 (2026-09-09, torp#206) — the same all-zero
-#' condition this paragraph already describes, just not covered by the
-#' condition.} \code{epv_hitout} is identically zero under v4 for every row,
+#' \strong{History: zeroed for v4 on 2026-09-09 (torp#206).}
+#' \code{epv_hitout} is identically zero under v4 for every row,
 #' checked across all six published seasons after the vintage rebuild. The
-#' guard below only ever tested \code{EPV_ENGINE == "v3"}, so v4 fell through
+#' helper's guard had only ever tested \code{EPV_ENGINE == "v3"}, so v4 fell through
 #' to the leftover v2/v3-era rate and every player's \code{epr_hitout} shrank
 #' toward a non-zero, purely-legacy prior instead of the zero the channel
 #' actually holds. Measured before the fix: mean \code{|epr_hitout|} = 0.0998
@@ -630,7 +512,7 @@ EPR_PRIOR_RATE_SPOIL <- .epr_prior_rate("spoil")
 #' explanation entirely and gained ~40 junk entries like `\keyword{Zeroed}`.
 #' Prose must precede the tag block.)
 #' @keywords internal
-EPR_PRIOR_RATE_HITOUT <- .epr_prior_rate_hitout()
+EPR_PRIOR_RATE_HITOUT <- 0
 
 #' Weight of EPR in TORP blend (0.5 = equal blend of EPR + PSR)
 #' @keywords internal
@@ -1495,22 +1377,6 @@ LINEUP_GROUP_MAP <- c(
   unname(LINEUP_GROUP_MAP[xc])
 }
 
-#' Which channels the position adjustment standardises, for a given engine
-#'
-#' The body of \code{EPV_STANDARDISE_CHANNELS} as a function of the engine, so a
-#' test can read the value under another engine without re-sourcing this file.
-#' @param engine One of the \code{EPV_ENGINE} values. Defaults to the live one.
-#' @keywords internal
-.epv_standardise_channels <- function(engine = EPV_ENGINE) {
-  if (engine %in% c("v3", "v4")) {
-    # v4 was gated with exactly this list (the frames were built under a v3
-    # load), so it keeps it: what ships is what was measured
-    c("recv", "disp")
-  } else {
-    c("recv", "disp", "spoil")
-  }
-}
-
 #' EPV channels the position adjustment rescales (see EPV_POSITION_STANDARDISE)
 #'
 #' \code{hitout} is deliberately excluded. Standardising divides by the
@@ -1533,11 +1399,12 @@ LINEUP_GROUP_MAP <- c(
 #' variance. It had been standardised out of existence. Excluding it takes the
 #' contest channel from t 1.83 to 2.24 and from 1.7% of value to 2.6%.
 #'
-#' Keyed on \code{EPV_ENGINE} rather than on \code{EPV3_CHANNELS} because v2's
-#' \code{spoil} channel is a genuine all-position quantity (spoils, tackles,
-#' pressure acts) that should keep being standardised.
+#' v4 was gated with exactly this list (its frames were built under a v3
+#' load), so it keeps it: what ships is what was measured. (v2 also
+#' standardised \code{spoil}; the engine switch that chose between the two
+#' lists was removed with v2 and v3 on 2026-11-16.)
 #' @keywords internal
-EPV_STANDARDISE_CHANNELS <- .epv_standardise_channels()
+EPV_STANDARDISE_CHANNELS <- c("recv", "disp")
 
 #' PSR prior rate for replacement-level players
 #'
@@ -1698,72 +1565,13 @@ EPV_HITOUT_ADV_WT <- 0.1748 * EPV_RUCK_SWING_SCALE
 #' much a won contest is worth against a lost one -- which is
 #' \code{EPV_HITOUT_WT} above.
 #'
-#' \strong{v3 reads the MAGNITUDE of this, not the signed value}
-#' (\code{player_credit.R}, the \code{EPV3_STOP_ZERO_SUM} branch). There the term
-#' multiplies \emph{hitouts}, i.e. it is the credit for a contest WON, with
-#' \code{EPV_RUCK_LOSS_WT} carrying the debit separately -- so a negative value
-#' here would charge a v3 ruck for winning. The two engines express the same
-#' idea with opposite sign conventions; changing one must not silently invert the
-#' other.
+#' (v3 read the magnitude of this as the credit for a contest WON, with a
+#' separate loss debit; that path was removed with v3 on 2026-11-16. Under v4
+#' this weight only feeds the box-score \code{epv_hitout} computed in
+#' \code{create_player_game_data()}'s Step 4, which v4 then overwrites with zero,
+#' and \code{player_epv_breakdown()}.)
 #' @keywords internal
 EPV_RUCK_CONTEST_WT <- -0.0232 * EPV_RUCK_SWING_SCALE
-
-#' Make v3's stoppage channel zero-sum instead of pay-to-attend
-#'
-#' \strong{FALSE = v2 behaviour, i.e. inert.} Only read when
-#' \code{EPV_ENGINE == "v3"}.
-#'
-#' Every other v3 channel is credit/debit: somebody gains and somebody sheds the
-#' same amount. \code{cont_stop} was not. It paid
-#' \code{hitouts * 0.0510 + hitouts_to_advantage * 0.1748 + ruck_contests * 0.0232},
-#' and because \code{EPV_RUCK_CONTEST_WT} was POSITIVE a ruckman was paid 0.0232
-#' for every contest he \emph{attended}, including the ones he lost. That was the
-#' one place v3's own logic did not hold.
-#'
-#' \strong{Update 2026-08-07: v2 now does the same thing by a different route.}
-#' \code{EPV_RUCK_CONTEST_WT} is \strong{-0.0232}, so v2's attendance term is a
-#' debit and its channel is a win/loss ledger too -- algebraically the same
-#' family as this one. The contrast this flag was named for has narrowed to a
-#' choice of which variable carries the penalty: v2 charges per contest
-#' ATTENDED, v3 charges per contest LOST. They differ only in how much a win is
-#' worth relative to a loss.
-#'
-#' A ruck contest has exactly two rucks and \code{hitouts} counts the ones this
-#' ruck won, so \code{ruck_contests - hitouts} is how many he LOST. Turning that
-#' term into a debit makes the channel behave like the other three without
-#' leaving the hitout carve-out -- it is the same three box fields, read as a
-#' win/loss ledger rather than an attendance count.
-#'
-#' \strong{ON since 2026-08-04.} Gated on channel quality rather than on match
-#' MAE, which cannot see it -- the match model consumes every channel diff
-#' separately and reweights them itself, so a cleaner channel carrying the same
-#' information is absorbed.
-#'
-#' What it buys, against the attendance-count version:
-#' \itemize{
-#'   \item \strong{count-dependence falls}, \code{cor(contest, hitouts)} 0.370 ->
-#'     0.252. This is the point of it: a COUNT can be padded by volume, a
-#'     DIFFERENTIAL cannot, and that is what makes the channel safe to scale.
-#'   \item year-over-year repeatability holds, 0.789 -> 0.792.
-#'   \item two rucks in the 2026 top 40 rather than one.
-#' }
-#'
-#' \strong{The reason for turning it on is not the reason previously written
-#' here.} That said it would let the channel be amplified; measurement killed the
-#' amplification instead (see \code{EPV_RUCK_SWING_SCALE} -- its justifying swing
-#' figure is ~93% centre-bounce reset artifact, and the regression route is
-#' ~40% team quality). The ledger stands on its own: paying a ruckman for
-#' contests he LOST is indefensible whatever the channel is worth.
-#' @keywords internal
-EPV3_STOP_ZERO_SUM <- TRUE
-
-#' Debit per ruck contest lost, under \code{EPV3_STOP_ZERO_SUM}
-#'
-#' Defaults to the magnitude of \code{EPV_RUCK_CONTEST_WT} so that attending and
-#' splitting contests 50/50 is worth zero rather than positive. Kept separate so
-#' the win and loss sides can be gated apart if the symmetric version fails.
-#' @keywords internal
-EPV_RUCK_LOSS_WT <- 0.0232 * EPV_RUCK_SWING_SCALE
 
 #' Contested possessions weight (recv component)
 #' @keywords internal

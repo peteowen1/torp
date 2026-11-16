@@ -436,7 +436,7 @@ utils::globalVariables(c(
   "team_epv", "season_coef", "season_se",
   # WP trajectory
   "final_margin", "x.margin",
-  # Contest credit (aerial 3-way split) in compute_contest_credit / add_contest_vars_dt
+  # Contest credit (aerial 3-way split) in add_contest_vars_dt
   ".next_tid", ".next_pid", "contest_outcome", "contest_epv", "is_target",
   "kick_display_order", "target_player_id", "defender_player_id",
   ".lag1_desc", ".lag1_do", ".lag2_desc", ".lag2_do",
@@ -447,7 +447,7 @@ utils::globalVariables(c(
   "aerial_target_wins", "aerial_target_losses",
   "aerial_def_wins", "aerial_def_losses",
   ".disp_scale",
-  # Contextual spoil credit (compute_spoil_credit)
+  # Contextual spoil credit (columns kept; compute_spoil_credit() was removed with v2)
   "spoil_epv_ctx", "spoils_priced",
   ".prev_desc", ".prev_tid", ".prev_x", ".prev_y",
   ".lag1_tid", ".lag2_tid", ".lag3_tid", ".lag4_tid", ".lag5_tid",

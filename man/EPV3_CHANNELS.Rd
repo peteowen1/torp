@@ -11,9 +11,15 @@ An object of class \code{integer} of length 1.
 EPV3_CHANNELS
 }
 \description{
-Pete's original framing was "3 subsections, maaaybe 4". Both are built.
+\strong{No longer read by anything (2026-11-16).} It only shaped the v3
+channel assembly and v3's hitout prior, both removed with the v3 engine. It
+stays because it is in \code{.rating_defining_constants()}, so removing it
+would change the published manifest; it goes in the next rating vintage. The
+record below is kept.
 }
 \details{
+Pete's original framing was "3 subsections, maaaybe 4". Both are built.
+
 \code{4} keeps aerial contests and stoppage contests apart:
 \code{recv / disp / cont_aerial / cont_stop}. \code{3} merges the two contest
 channels into one: \code{recv / disp / cont}.

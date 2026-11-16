@@ -99,7 +99,7 @@ get_player_game_ratings <- function(match = NULL,
   # The match's own chains go in, never load_chains(TRUE): without them the v4
   # arm loaded the full history and refitted every model on this one match
   # (torp#250). Under v4 the nightly's season fit prices it instead.
-  fit <- if (identical(EPV_ENGINE, "v4")) .resolve_np_fit(np_fit, season) else NULL
+  fit <- .resolve_np_fit(np_fit, season)
   cli::cli_inform("Computing player EPV credit...")
   player_epv <- create_player_game_data(
     pbp_data = pbp,

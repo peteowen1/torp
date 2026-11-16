@@ -30,12 +30,10 @@ no separate loss term to add for v2, and the only real free parameter is how
 much a won contest is worth against a lost one -- which is
 \code{EPV_HITOUT_WT} above.
 
-\strong{v3 reads the MAGNITUDE of this, not the signed value}
-(\code{player_credit.R}, the \code{EPV3_STOP_ZERO_SUM} branch). There the term
-multiplies \emph{hitouts}, i.e. it is the credit for a contest WON, with
-\code{EPV_RUCK_LOSS_WT} carrying the debit separately -- so a negative value
-here would charge a v3 ruck for winning. The two engines express the same
-idea with opposite sign conventions; changing one must not silently invert the
-other.
+(v3 read the magnitude of this as the credit for a contest WON, with a
+separate loss debit; that path was removed with v3 on 2026-11-16. Under v4
+this weight only feeds the box-score \code{epv_hitout} computed in
+\code{create_player_game_data()}'s Step 4, which v4 then overwrites with zero,
+and \code{player_epv_breakdown()}.)
 }
 \keyword{internal}

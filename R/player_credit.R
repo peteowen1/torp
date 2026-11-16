@@ -59,21 +59,17 @@ default_epv_params <- function() {
 #' kept an \code{!all(scale == 1)} fall-through that had been removed here as a
 #' bug. All three made it disagree with the published pipeline silently.
 #'
-#' Keyed on the engine ACTUALLY IN USE (the attribute the frame carries), not
-#' the global default -- a caller passing \code{epv_engine = "v3"} while the
-#' constant still reads \code{"v2"} would otherwise get no per-channel scaling.
+#' Until 2026-11-16 a frame stamped \code{"v3"} also switched this on; that
+#' engine has been removed, so only \code{EPV_PER_CHANNEL_POINTS_SCALE} decides
+#' now. The argument is kept so the call sites still say which frame they are
+#' asking about.
 #'
-#' Deliberately NOT also conditioned on the vector being non-trivial: under v3
-#' the per-channel vector is authoritative even when it is all 1s. All 1s means
-#' no scaling, not "fall back to v2's 0.919".
-#'
-#' @param engine_attr The frame's \code{epv_engine} attribute, or NULL.
+#' @param engine_attr The frame's \code{epv_engine} attribute, or NULL. No
+#'   longer changes the answer.
 #' @return TRUE if \code{EPV3_POINTS_SCALE} should be applied per channel.
 #' @keywords internal
 .use_per_channel_scale <- function(engine_attr) {
-  # EPV3_POINTS_SCALE is always defined (constants_ratings.R: the 1s vector for
-  # non-v3 engines), so no exists() guard is needed -- it could never be FALSE.
-  identical(engine_attr, "v3") || isTRUE(EPV_PER_CHANNEL_POINTS_SCALE)
+  isTRUE(EPV_PER_CHANNEL_POINTS_SCALE)
 }
 
 #' Read the engine a frame was priced with
@@ -362,7 +358,7 @@ centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
   } else if (is.finite(EPV_POINTS_SCALE) && !isTRUE(all.equal(EPV_POINTS_SCALE, 1))) {
     if (identical(frame_engine, "v4")) {
       # v4 is already in margin points (the ledger sums to the margin, and
-      # .epr_prior_points_scale() returns 1 for v4), yet this branch applies
+      # the prior's points scale is 1 for v4), yet this branch applies
       # v2's global 0.919 to the data term while the shrinkage prior stays
       # unscaled -- the mismatch the comment above warns about. NOT changed
       # here: doing so moves every published v4 rating, and EPR_UNITS_SCALE_V4
@@ -598,9 +594,8 @@ centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
 #' Zero-fill the contest / contextual-spoil columns after their left joins
 #'
 #' A player-match that took part in no priced contest or spoil has no row in
-#' those tables, so the join leaves NA; the honest value is zero. Shared by the
-#' v2, v3 and v4 arms of \code{create_player_game_data()}, which each carried
-#' their own copy of these seven lines.
+#' those tables, so the join leaves NA; the honest value is zero. Under v4
+#' those tables are always empty, so every one of these columns is zero.
 #'
 #' @param df Player-match frame carrying the joined contest columns.
 #' @return \code{df} with those columns zero-filled (counts as integer).
@@ -643,11 +638,10 @@ centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
 #' @param decay Decay factor for time-weighting games. Default is \code{EPR_DECAY_DEFAULT_DAYS} (486).
 #' @param epv_params Named list of EPV assignment parameters. If NULL,
 #'   uses \code{default_epv_params()}.
-#' @param epv_engine Which EPV engine to run: \code{"v2"} (production) or
-#'   \code{"v3"} (chain-native, held). Defaults to the \code{EPV_ENGINE}
-#'   constant. Passed explicitly rather than read from the constant inside, so
-#'   a caller can select an engine the global default does not name; the choice
-#'   is recorded on the returned frame as its \code{epv_engine} attribute.
+#' @param epv_engine Which EPV engine to run. Only \code{"v4"} (Net Points)
+#'   exists; anything else is an error (the v2 and v3 engines were removed on
+#'   2026-11-16). Defaults to the \code{EPV_ENGINE} constant. Recorded on the
+#'   returned frame as its \code{epv_engine} attribute and column.
 #'
 #' @param difficulty_terms v4 only: precomputed difficulty terms from
 #'   `np_difficulty_terms_for_season()` (leak-safe). Fitted in-sample, with a
@@ -669,9 +663,10 @@ centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
 #'   \code{utc_start_time}), position-adjusted EPV (\code{epv_adj},
 #'   \code{epv_recv_adj}, \code{epv_disp_adj}, \code{epv_spoil_adj}, \code{epv_hitout_adj}),
 #'   raw EPV (\code{epv}, \code{epv_recv}, \code{epv_disp}, \code{epv_spoil},
-#'   \code{epv_hitout}), contextual spoil credit (\code{spoil_epv_ctx},
-#'   \code{spoils_priced} — see \code{compute_spoil_credit()}; not folded into
-#'   \code{epv_spoil}), and key box-score stats.
+#'   \code{epv_hitout}), the retired v2 contest and contextual spoil columns
+#'   (\code{contest_epv}, \code{aerial_*}, \code{spoil_epv_ctx},
+#'   \code{spoils_priced}; always zero under v4, kept for the released schema),
+#'   and key box-score stats.
 #'
 #' @export
 #'
@@ -692,16 +687,16 @@ create_player_game_data <- function(pbp_data = NULL,
                                     np_fit = NULL,
                                     keep_np_fit = FALSE) {
 
-  if (!epv_engine %in% c("v2", "v3", "v4")) {
+  # v4 is the only engine. The v2 (box-score) and v3 (chain-native contest)
+  # engines were removed on 2026-11-16 after ten weeks unpublished; git history
+  # keeps them. The argument stays so the engine a frame was built with is still
+  # stamped on it, and so an old call asking for v2/v3 fails loudly instead of
+  # silently getting v4.
+  if (!identical(epv_engine, "v4")) {
     cli::cli_abort(c(
       "Unknown {.arg epv_engine}: {.val {epv_engine}}",
-      "x" = "Refusing to guess an engine -- expected {.val v2}, {.val v3} or {.val v4}."
+      "x" = "Only {.val v4} exists. The v2 and v3 engines were removed on 2026-11-16; git history keeps them."
     ))
-  }
-  v3 <- identical(epv_engine, "v3")
-  v4 <- identical(epv_engine, "v4")
-  if ((!is.null(np_fit) || isTRUE(keep_np_fit)) && !v4) {
-    cli::cli_abort("{.arg np_fit} and {.arg keep_np_fit} are v4 only; this call runs {.val {epv_engine}}.")
   }
   if (!is.null(np_fit)) {
     if (!is.null(difficulty_terms)) {
@@ -713,9 +708,6 @@ create_player_game_data <- function(pbp_data = NULL,
       cli::cli_abort("{.arg np_fit} needs {.arg chains} for the same matches as {.arg pbp_data}.")
     }
   }
-  # v3 and v4 are both chain-native: neither takes the v2 box-score spoil terms
-  chain_native <- v3 || v4
-
   p <- if (is.null(epv_params)) default_epv_params() else epv_params
 
   if (is.null(pbp_data)) pbp_data <- load_pbp(TRUE)
@@ -735,61 +727,12 @@ create_player_game_data <- function(pbp_data = NULL,
     opp_tm = data.table::fifelse(home_away == "Home", away_team_name, home_team_name)
   )]
 
-  # --- v3: aerial contests, computed before the disposer/receiver split ---
-  # Every kick resolved in the air is removed from that split and paid instead as
-  # disposal (V_pre - exp_pts, to the kicker) plus a zero-sum contest term
-  # (winner/loser). Skipping the exclusion would pay the same swing twice.
-  aerial <- NULL
-  aerial_keys <- NULL
-  if (v3) {
-    if (is.null(chains)) chains <- load_chains(TRUE)
-    aerial <- compute_aerial_credit(chains, pbp_data, player_stats = player_stats)
-    aerial_keys <- attr(aerial, "aerial_kick_keys")
-    dt[, .is_aerial_kick := FALSE]
-    if (!is.null(aerial_keys) && nrow(aerial_keys) > 0) {
-      dt[aerial_keys, .is_aerial_kick := TRUE, on = .(match_id, display_order)]
-    }
-    cli::cli_alert_info(
-      "EPV v3: {format(nrow(aerial_keys), big.mark = ',')} aerial contests removed from the disposer/receiver split ({round(100 * mean(dt$.is_aerial_kick), 1)}% of PBP rows)")
-  } else {
-    dt[, .is_aerial_kick := FALSE]
-  }
-
-  # --- Difficulty-weighted disposals, computed before the flat split ---
-  # Same shape as the aerial block: the covered disposals are removed from the
-  # flat EPV_DISP_SCALE/EPV_RECV_SCALE split and paid instead from `difficulty`,
-  # where the share follows P(turnover) rather than being fixed at half. Aerial
-  # contests are excluded because they already have their own surprise term.
-  difficulty <- NULL
-  dt[, .is_diff_disp := FALSE]
-  if (isTRUE(EPV_DIFFICULTY_SPLIT)) {
-    if (is.null(chains)) chains <- load_chains(TRUE)
-    # WHAT IS ALREADY PAID DIFFERS BY ENGINE, and getting this wrong
-    # double-counts silently rather than erroring.
-    #
-    #   v3  aerial contests carry their own surprise term (`aerial`)
-    #   v2  contested kicks are paid by `contest_epv`, a 3-way split added into
-    #       epv_recv further down -- and v2 ALSO reduces .disp_scale to 1/3 on
-    #       those rows for the same reason
-    #
-    # Either way the covered rows must not also be paid by the difficulty
-    # split. Under v2 that exclusion did not exist until 2026-08-05, because
-    # the split had only ever been run under v3.
-    .excl <- aerial_keys
-    if (!v3 && "contest_target_id" %in% names(dt)) {
-      .excl <- unique(dt[!is.na(contest_target_id), .(match_id, display_order)])
-      cli::cli_alert_info(
-        "Difficulty split (v2): {format(nrow(.excl), big.mark = ',')} contested kick{?s} left to `contest_epv`.")
-    }
-    difficulty <- compute_difficulty_credit(chains, pbp_data,
-                                            exclude_keys = .excl)
-    diff_keys <- attr(difficulty, "disposal_keys")
-    if (!is.null(diff_keys) && nrow(diff_keys) > 0) {
-      dt[diff_keys, .is_diff_disp := TRUE, on = .(match_id, display_order)]
-    }
-    cli::cli_alert_info(
-      "Difficulty split: {format(nrow(diff_keys), big.mark = ',')} disposals paid by P(turnover) ({round(100 * mean(dt$.is_diff_disp), 1)}% of PBP rows)")
-  }
+  # Steps 1-2 below still build the old flat disposer/receiver split. Under v4
+  # its epv_disp / epv_recv are overwritten by the Net Points channels further
+  # down; what survives from it is the frame's rows and identifiers and the
+  # disposals_pbp / receptions counts. (The v3 aerial-contest exclusion and the
+  # EPV_DIFFICULTY_SPLIT re-pricing that used to sit here only ever fed the v2
+  # and v3 channels, and were removed with them on 2026-11-16.)
 
   # Step 1: Disposal points (grouped by player_id + match_id)
   # For contested kicks (contest_target_id is non-NA), reduce disposal scale
@@ -803,10 +746,6 @@ create_player_game_data <- function(pbp_data = NULL,
   } else {
     p$disp_scale
   }]
-  # Under v3 an aerial kick's disposal credit is V_pre - exp_pts, not a fixed
-  # share of the swing, so it is zeroed here and added back from `aerial`.
-  if (v3) dt[.is_aerial_kick == TRUE, .disp_scale := 0]
-  dt[.is_diff_disp == TRUE, .disp_scale := 0]
   disp_dt <- dt[, .(
     player_name = max(player_name, na.rm = TRUE),
     utc_start_time = max(utc_start_time),
@@ -829,11 +768,7 @@ create_player_game_data <- function(pbp_data = NULL,
   # it's a 3-player contest handled by contest_epv instead
   dt[, is_contest_target_recv :=has_contest_col & !is.na(contest_target_id)]
   dt[, is_intercept_mark := pos_team == -1L & grepl("ted Mark|Mark On", lead_desc_tot)]
-  # v3 also drops aerial-kick rows here: the player who marks the ball is paid by
-  # the contest channel, and paying him a reception share as well would be the
-  # double count kick-anchoring exists to remove.
-  recv_dt <- dt[is_contest_target_recv == FALSE & .is_aerial_kick == FALSE &
-                  .is_diff_disp == FALSE, .(
+  recv_dt <- dt[is_contest_target_recv == FALSE, .(
     epv_recv = sum(data.table::fifelse(
       is_intercept_mark,
       ((p$recv_neg_mult * delta_epv * pos_team) + p$recv_neg_offset) * p$recv_intercept_mark_scale,
@@ -854,7 +789,7 @@ create_player_game_data <- function(pbp_data = NULL,
     all.x = TRUE, sort = FALSE)
 
   # --- Step 3b: WPA credit ---
-  # wp_failed is read at the zero-fill after the engine arms: a player-match
+  # wp_failed is read at the zero-fill after the v4 channels: a player-match
   # missing from a run that SUCCEEDED is a real zero, but a failed run must
   # leave the columns NA, never a plausible-looking all-zero channel.
   wp_failed <- FALSE
@@ -926,87 +861,26 @@ create_player_game_data <- function(pbp_data = NULL,
                         wpa_won = "wpa_neutral_won", wpa_team = "wpa_neutral_team")),
     wpn_neutral_cols)
 
-  # --- Step 3b2: difficulty-weighted disposal credit ---
-  # Left-joined like every other channel, so a player who ONLY appears as a
-  # receiver is dropped here exactly as he already is by the Step 3 join. The
-  # columns are always present so the two mutate branches below can add them
-  # unconditionally; they are identically zero when the flag is off.
-  if (is.null(difficulty)) {
-    data.table::set(plyr_gm_df, j = "epv_disp_diff", value = 0)
-    data.table::set(plyr_gm_df, j = "epv_recv_diff", value = 0)
-  } else {
-    plyr_gm_df <- merge(plyr_gm_df, difficulty,
-      by = c("player_id", "match_id"), all.x = TRUE, sort = FALSE)
-  }
-
-  # --- Step 3c: Contest credit from aerial contests (3-way EPV split) ---
-  # v2 only. v3 supersedes this with the surprise-weighted contest in Step 0 and
-  # does not read `contest_epv` at all -- so running it under v3 would burn ~2
-  # minutes AND emit a column that looks meaningful and is not. An unused column
-  # that a reader will reasonably assume is live is worse than a missing one.
+  # --- Step 3c: the v2 contest and contextual-spoil columns, kept at zero ---
+  # contest_epv / aerial_target_* / aerial_def_* (v2's 3-way aerial split) and
+  # spoil_epv_ctx / spoils_priced (v2's contextual spoil pricing) are still in
+  # player_game_data's released schema, so they stay -- as zeros, which is what
+  # v4 has always published in them. The v2 code that filled them
+  # (compute_contest_credit(), compute_spoil_credit()) was removed on
+  # 2026-11-16. Joined against empty tables so the column types are unchanged.
   empty_contest <- data.table::data.table(
     player_id = character(), match_id = character(),
     contest_epv = numeric(),
     aerial_target_wins = integer(), aerial_target_losses = integer(),
     aerial_def_wins = integer(), aerial_def_losses = integer()
   )
-  # chain-native engines (v3 and v4) never read this; v4 was paying for the
-  # full v2 contest split and discarding it (review, 2026-09-06)
-  contest_dt <- if (chain_native) empty_contest else tryCatch({
-    if (is.null(chains)) chains <- load_chains(TRUE)
-    compute_contest_credit(chains, pbp_data,
-                           contest_share = p$contest_share %||% (1 / 3))
-  }, error = function(e) {
-    is_data_unavailable <- grepl(
-      "load_chains|download|HTTP|connection|404|timeout",
-      conditionMessage(e), ignore.case = TRUE
-    )
-    if (!is_data_unavailable) {
-      cli::cli_abort("Contest credit computation failed: {conditionMessage(e)}")
-    }
-    cli::cli_warn("Contest credit skipped (data unavailable): {conditionMessage(e)}")
-    data.table::data.table(
-      player_id = character(), match_id = character(),
-      contest_epv = numeric(),
-      aerial_target_wins = integer(), aerial_target_losses = integer(),
-      aerial_def_wins = integer(), aerial_def_losses = integer()
-    )
-  })
-  plyr_gm_df <- merge(plyr_gm_df, contest_dt,
+  plyr_gm_df <- merge(plyr_gm_df, empty_contest,
     by = c("player_id", "match_id"), all.x = TRUE, sort = FALSE)
-
-  # --- Step 3d: Contextual spoil credit (WS2a) ---
-  # Prices the ~72% of spoils compute_contest_credit() misses. Emitted as a
-  # standalone column only — epv_spoil still uses the flat EPV_SPOIL_WT, so
-  # published ratings are unchanged until WS2b decides how this enters.
-  #
-  # v2 only, for the same reason as Step 3c. v3 prices every spoil inside the
-  # aerial contest itself, so this whole workstream is superseded there: the
-  # question it was built to answer ("how do we fold contextual spoil value in?")
-  # stops existing when the contest channel IS contextual.
   empty_spoil_ctx <- data.table::data.table(
     player_id = character(), match_id = character(),
     spoil_epv_ctx = numeric(), spoils_priced = integer()
   )
-  spoil_ctx_dt <- if (chain_native) empty_spoil_ctx else tryCatch({
-    if (is.null(chains)) chains <- load_chains(TRUE)
-    compute_spoil_credit(chains, pbp_data,
-                         contest_share = p$contest_share %||% (1 / 3))
-  }, error = function(e) {
-    is_data_unavailable <- grepl(
-      "load_chains|download|HTTP|connection|404|timeout",
-      conditionMessage(e), ignore.case = TRUE
-    )
-    if (!is_data_unavailable) {
-      cli::cli_abort("Contextual spoil credit computation failed: {conditionMessage(e)}")
-    }
-    cli::cli_warn("Contextual spoil credit skipped (data unavailable): {conditionMessage(e)}")
-    data.table::data.table(
-      player_id = character(), match_id = character(),
-      spoil_epv_ctx = numeric(), spoils_priced = integer()
-    )
-  })
-  plyr_gm_df <- merge(plyr_gm_df, spoil_ctx_dt,
+  plyr_gm_df <- merge(plyr_gm_df, empty_spoil_ctx,
     by = c("player_id", "match_id"), all.x = TRUE, sort = FALSE)
 
   # --- Step 4: Join spoils/tackles/hitouts from raw player_stats ---
@@ -1058,204 +932,84 @@ create_player_game_data <- function(pbp_data = NULL,
     plyr_gm_df[[col]] <- tidyr::replace_na(plyr_gm_df[[col]], 0)
   }
 
-  # --- v3 channel assembly ---
-  # The thirty box-score weights are gone. Grouped by why each is safe to drop:
-  #
-  #  (a) already priced by the chain event itself, so v2 paid twice: kicks,
-  #      handballs, marks, contested_marks, uncontested/contested_possessions,
-  #      ground_ball_gets, inside50s, marks_inside50, metres_gained, rebound50s,
-  #      intercepts, goals, behinds, shots_at_goal, goal_assists,
-  #      score_involvements, turnovers, clangers, frees_for/against. Every one is
-  #      a chain row carrying a delta_epv (Kick 100%, Handball 99.9%,
-  #      Loose Ball Get 99.9%, Contested Mark 100% present in PBP).
-  #
-  #  (b) genuinely absent from chains, so the VALUE survives but the ATTRIBUTION
-  #      does not: tackles (chains logs 0.49 Tackle rows per match against ~60
-  #      real ones), pressure_acts, def_half_pressure_acts, one_percenters. A
-  #      tackle's expected-points effect is in the chain as the turnover the
-  #      opponent concedes -- credited to whoever next wins the ball, not to the
-  #      tackler. This is v3's single biggest known cost and it is not hidden:
-  #      tacklers are under-credited inside EPV, and PSV carries tackling.
-  #
-  # epv_hitout keeps its box formula. That is the one permitted carve-out and it
-  # is not convenience: Centre Bounce and Ball Up Call rows carry a player_id
-  # 0.0% of the time, so the ruckmen are simply not in the data.
-  if (v3) {
-    aerial_dt <- aerial[, .(player_id, match_id, epv_cont_aerial,
-                            epv_disp_aerial, contests_won, contests_lost)]
-    n_before_join <- nrow(plyr_gm_df)
-    plyr_gm_df <- plyr_gm_df |>
-      dplyr::left_join(as.data.frame(aerial_dt), by = c("player_id", "match_id"))
-    if (nrow(plyr_gm_df) != n_before_join) {
+  # v4: the Net Points ledger (docs/plans/EPV-V4-CREDIT-RULES.md). One value
+  # per player-match that sums, across a match, to the margin. Three
+  # channels, Pete's starting point for EPR: own acts (decisions, surprises
+  # and what he received, net of what his losses ceded), what he won back
+  # (turnovers, contests, stoppages), and his share of the team pools. The
+  # reconciliation residual rides with the pools so the channels sum to the
+  # total exactly. The four column names are kept so EPR's plumbing reads
+  # them unchanged: recv = won, disp = own, spoil = pools, hitout = 0.
+  if (is.null(chains) && is.null(difficulty_terms)) chains <- load_chains(TRUE)
+  np <- .np_engine_frame(pbp_data, player_stats, chains, difficulty_terms,
+                         np_fit = np_fit, return_fit = isTRUE(keep_np_fit))
+  np_fit_used <- attr(np, "np_fit")
+  np_dt <- .np_v4_channels(np)
+  # Where each player-match's net points came from, by play type (published
+  # beside the game data; see .np_breakdown()). Only the team-margin
+  # convention exposes final-value payments, so it is NULL without it.
+  np_bd <- if (isTRUE(NP_TEAM_MARGIN_CONVENTION)) .np_breakdown(np, pbp_data) else NULL
+  # A player with net points but no play-by-play act (a pool share for a sub
+  # who never touched it) has no row in this frame, in any engine. His value
+  # re-spreads across his team-mates in that match by time on ground, so the
+  # frame still sums to the margin; the amount is logged (1.56 points across
+  # 2026, two player-matches).
+  lost <- np_dt[!plyr_gm_df, on = .(player_id, match_id)]
+  if (nrow(lost) > 0) {
+    cli::cli_alert_warning(
+      "v4: {nrow(lost)} player-match{?es} with net points but no play-by-play act ({round(sum(abs(lost$net_points)), 2)} points) re-spread within their team by time on ground.")
+    lost_team <- np[lost, on = .(player_id, match_id), .(match_id, team, v = i.net_points)][
+      , .(v = sum(v)), by = .(match_id, team)]
+    np_dt <- merge(np_dt, np[, .(player_id, match_id, team)], by = c("player_id", "match_id"))
+    np_dt <- np_dt[!lost, on = .(player_id, match_id)]
+    # Built from the three columns it reads: as.data.table() on the whole
+    # player_stats deep-copies every column to keep two.
+    tg <- data.table::data.table(
+      player_id = player_stats$player_id,
+      match_id = player_stats$match_id,
+      tog = pmax(player_stats$time_on_ground_percentage, 1))
+    np_dt[tg, on = .(player_id, match_id), tog := i.tog]
+    np_dt[is.na(tog), tog := 75]
+    np_dt[lost_team, on = .(match_id, team), v_lost := i.v]
+    np_dt[is.na(v_lost), v_lost := 0]
+    np_dt[, share := v_lost * tog / sum(tog), by = .(match_id, team)]
+    # every lost point must land on a surviving team-mate; a team with no
+    # surviving row at all is a data failure, not a rounding case
+    respread <- np_dt[, .(got = sum(share)), by = .(match_id, team)]
+    owed <- merge(lost_team, respread, by = c("match_id", "team"), all.x = TRUE)
+    owed[is.na(got), got := 0]
+    if (nrow(owed) && max(abs(owed$v - owed$got)) > 1e-8) {
       cli::cli_abort(c(
-        "Joining aerial credit changed the row count ({n_before_join} -> {nrow(plyr_gm_df)}).",
-        "x" = "The aerial table has duplicated (player_id, match_id) keys, which would double-count those player-matches."
+        "v4: {round(sum(abs(owed$v - owed$got)), 2)} points of net points belong to a team with no player row in the frame.",
+        "x" = "Nothing to re-spread them across; the frame would no longer sum to the margin."
       ))
     }
-    plyr_gm_df <- .zero_fill_contest_cols(plyr_gm_df) |>
-      dplyr::mutate(
-        contests_won = as.integer(tidyr::replace_na(contests_won, 0)),
-        contests_lost = as.integer(tidyr::replace_na(contests_lost, 0)),
-        epv_recv = tidyr::replace_na(epv_recv, 0) +
-                   tidyr::replace_na(epv_recv_diff, 0),
-        epv_disp = tidyr::replace_na(epv_disp, 0) +
-                   tidyr::replace_na(epv_disp_aerial, 0) +
-                   tidyr::replace_na(epv_disp_diff, 0),
-        epv_cont_aerial = tidyr::replace_na(epv_cont_aerial, 0),
-        # cont_stop is the one channel that is not credit/debit: the v2 formula
-        # pays EPV_RUCK_CONTEST_WT for every contest ATTENDED, won or lost. With
-        # EPV3_STOP_ZERO_SUM the attendance term becomes a win/loss ledger --
-        # `ruck_contests - hitouts` is what this ruck lost, since a contest has
-        # exactly two rucks and `hitouts` counts the ones he won.
-        epv_cont_stop = if (isTRUE(EPV3_STOP_ZERO_SUM)) {
-          # These three come straight off the player_stats join and are NOT in
-          # the box_score_cols zero-fill above, so a player with no stats row
-          # would otherwise produce NA here and silently drop out of the
-          # channel. The v2 path never hit this because it zero-fills
-          # epv_hitout after summing.
-          .ho  <- tidyr::replace_na(hitouts, 0)
-          .hta <- tidyr::replace_na(hitouts_to_advantage, 0)
-          .rc  <- tidyr::replace_na(ruck_contests, 0)
-          # abs() on the contest weight, and it is load-bearing. HERE that term
-          # multiplies `hitouts`, so it is the credit for a contest WON, with
-          # EPV_RUCK_LOSS_WT carrying the debit on the next line. v2 uses the
-          # same constant against `ruck_contests` -- attendance -- where it is a
-          # DEBIT and went negative on 2026-08-07. Reading it signed would make
-          # v3 charge a ruck for winning. Same idea, opposite sign convention.
-          .ho * p$hitout_wt + .hta * p$hitout_adv_wt +
-            .ho * abs(p$ruck_contest_wt) -
-            pmax(0, .rc - .ho) * EPV_RUCK_LOSS_WT
-        } else {
-          tidyr::replace_na(epv_hitout, 0)
-        },
-        # The downstream stack (EPR channels, column schema, blog shapes) is
-        # keyed on the v2 names. Aliasing rather than renaming keeps v3 to one
-        # file; if it ships, the rename is the follow-up.
-        #
-        # Under EPV3_CHANNELS = 3 the two contest channels share one slot and the
-        # hitout slot is emptied. `epv` is IDENTICAL either way -- the whole
-        # 3-vs-4 difference is how EPR aggregates, since each slot carries its own
-        # decay and shrinkage prior. EPR_PRIOR_RATE_HITOUT is zeroed to match, so
-        # the empty slot contributes exactly zero instead of shrinking toward a
-        # prior for a channel that no longer exists.
-        #
-        # The two contest components are put on a common footing BEFORE they are
-        # added (`EPV3_SUB_SCALE`). A raw sum blends them by VARIANCE, and the
-        # aerial part has ~3x the spread while carrying no margin signal of its
-        # own, so the ruck signal gets swamped rather than carried. Scaling each
-        # to one-point-per-unit first makes the merge blend by POINTS. Under 4
-        # channels the two never meet, so no sub-scale is needed or applied.
-        epv_spoil = if (identical(EPV3_CHANNELS, 3L)) {
-          epv_cont_aerial * EPV3_SUB_SCALE[["cont_aerial"]] +
-            epv_cont_stop * EPV3_SUB_SCALE[["cont_stop"]]
-        } else {
-          epv_cont_aerial
-        },
-        epv_hitout = if (identical(EPV3_CHANNELS, 3L)) 0 else epv_cont_stop,
-        # Built from the SLOTS, not from the raw components, so the total and
-        # its parts cannot disagree once a sub-scale is live. Identical to the
-        # old expression whenever EPV3_SUB_SCALE is all 1s.
-        epv = epv_recv + epv_disp + epv_spoil + epv_hitout
-      )
-  } else if (v4) {
-    # v4: the Net Points ledger (docs/plans/EPV-V4-CREDIT-RULES.md). One value
-    # per player-match that sums, across a match, to the margin. Three
-    # channels, Pete's starting point for EPR: own acts (decisions, surprises
-    # and what he received, net of what his losses ceded), what he won back
-    # (turnovers, contests, stoppages), and his share of the team pools. The
-    # reconciliation residual rides with the pools so the channels sum to the
-    # total exactly. The four column names are kept so EPR's plumbing reads
-    # them unchanged: recv = won, disp = own, spoil = pools, hitout = 0.
-    if (is.null(chains) && is.null(difficulty_terms)) chains <- load_chains(TRUE)
-    np <- .np_engine_frame(pbp_data, player_stats, chains, difficulty_terms,
-                           np_fit = np_fit, return_fit = isTRUE(keep_np_fit))
-    np_fit_used <- attr(np, "np_fit")
-    np_dt <- .np_v4_channels(np)
-    # Where each player-match's net points came from, by play type (published
-    # beside the game data; see .np_breakdown()). Only the team-margin
-    # convention exposes final-value payments, so it is NULL without it.
-    np_bd <- if (isTRUE(NP_TEAM_MARGIN_CONVENTION)) .np_breakdown(np, pbp_data) else NULL
-    # A player with net points but no play-by-play act (a pool share for a sub
-    # who never touched it) has no row in this frame, in any engine. His value
-    # re-spreads across his team-mates in that match by time on ground, so the
-    # frame still sums to the margin; the amount is logged (1.56 points across
-    # 2026, two player-matches).
-    lost <- np_dt[!plyr_gm_df, on = .(player_id, match_id)]
-    if (nrow(lost) > 0) {
-      cli::cli_alert_warning(
-        "v4: {nrow(lost)} player-match{?es} with net points but no play-by-play act ({round(sum(abs(lost$net_points)), 2)} points) re-spread within their team by time on ground.")
-      lost_team <- np[lost, on = .(player_id, match_id), .(match_id, team, v = i.net_points)][
-        , .(v = sum(v)), by = .(match_id, team)]
-      np_dt <- merge(np_dt, np[, .(player_id, match_id, team)], by = c("player_id", "match_id"))
-      np_dt <- np_dt[!lost, on = .(player_id, match_id)]
-      # Built from the three columns it reads: as.data.table() on the whole
-      # player_stats deep-copies every column to keep two.
-      tg <- data.table::data.table(
-        player_id = player_stats$player_id,
-        match_id = player_stats$match_id,
-        tog = pmax(player_stats$time_on_ground_percentage, 1))
-      np_dt[tg, on = .(player_id, match_id), tog := i.tog]
-      np_dt[is.na(tog), tog := 75]
-      np_dt[lost_team, on = .(match_id, team), v_lost := i.v]
-      np_dt[is.na(v_lost), v_lost := 0]
-      np_dt[, share := v_lost * tog / sum(tog), by = .(match_id, team)]
-      # every lost point must land on a surviving team-mate; a team with no
-      # surviving row at all is a data failure, not a rounding case
-      respread <- np_dt[, .(got = sum(share)), by = .(match_id, team)]
-      owed <- merge(lost_team, respread, by = c("match_id", "team"), all.x = TRUE)
-      owed[is.na(got), got := 0]
-      if (nrow(owed) && max(abs(owed$v - owed$got)) > 1e-8) {
-        cli::cli_abort(c(
-          "v4: {round(sum(abs(owed$v - owed$got)), 2)} points of net points belong to a team with no player row in the frame.",
-          "x" = "Nothing to re-spread them across; the frame would no longer sum to the margin."
-        ))
-      }
-      np_dt[, `:=`(np_pool = np_pool + share, net_points = net_points + share)]
-      if (!is.null(np_bd)) {
-        np_bd <- np_bd[!lost[, .(player_id = as.character(player_id), match_id = as.character(match_id))],
-                       on = .(player_id, match_id)]
-        np_bd <- rbind(np_bd, np_dt[share != 0, .(match_id = as.character(match_id),
-                                                  player_id = as.character(player_id),
-                                                  category = "Re-spread from a team-mate with no act",
-                                                  value = share)])
-      }
-      np_dt[, c("team", "tog", "v_lost", "share") := NULL]
+    np_dt[, `:=`(np_pool = np_pool + share, net_points = net_points + share)]
+    if (!is.null(np_bd)) {
+      np_bd <- np_bd[!lost[, .(player_id = as.character(player_id), match_id = as.character(match_id))],
+                     on = .(player_id, match_id)]
+      np_bd <- rbind(np_bd, np_dt[share != 0, .(match_id = as.character(match_id),
+                                                player_id = as.character(player_id),
+                                                category = "Re-spread from a team-mate with no act",
+                                                value = share)])
     }
-    plyr_gm_df <- plyr_gm_df |>
-      dplyr::left_join(as.data.frame(np_dt), by = c("player_id", "match_id"))
-    # (the WP columns are zero-filled once, after the engine arms, below)
-    plyr_gm_df <- .zero_fill_contest_cols(plyr_gm_df) |>
-      dplyr::mutate(
-        epv_recv = tidyr::replace_na(np_won, 0),
-        epv_disp = tidyr::replace_na(np_own, 0),
-        epv_spoil = tidyr::replace_na(np_pool, 0),
-        epv_hitout = 0,
-        epv = epv_recv + epv_disp + epv_spoil + epv_hitout,
-        net_points = tidyr::replace_na(net_points, 0)
-      ) |>
-      dplyr::select(-dplyr::any_of(c("np_own", "np_won", "np_pool")))
-    gap <- max(abs(plyr_gm_df$epv - plyr_gm_df$net_points))
-    if (gap > 1e-8) cli::cli_abort("v4 channels do not sum to net points (max gap {signif(gap, 3)}).")
-  } else {
+    np_dt[, c("team", "tog", "v_lost", "share") := NULL]
+  }
+  plyr_gm_df <- plyr_gm_df |>
+    dplyr::left_join(as.data.frame(np_dt), by = c("player_id", "match_id"))
+  # (the WP columns are zero-filled once, below)
   plyr_gm_df <- .zero_fill_contest_cols(plyr_gm_df) |>
     dplyr::mutate(
-      epv_recv = tidyr::replace_na(epv_recv, 0) +
-                 tidyr::replace_na(epv_recv_diff, 0) + contest_epv +
-                 contested_possessions * p$contested_poss_wt + contested_marks * p$contested_marks_wt +
-                 ground_ball_gets * p$ground_ball_gets_wt + marks_inside50 * p$marks_inside50_wt +
-                 marks * p$marks_wt + uncontested_possessions * p$uncontested_poss_wt +
-                 frees_for * p$frees_for_wt,
-      epv_disp = tidyr::replace_na(epv_disp, 0) +
-                 tidyr::replace_na(epv_disp_diff, 0) +
-                 inside50s * p$inside50s_wt + clangers * p$clangers_wt + score_involvements * p$score_involvements_wt +
-                 kicks * p$kicks_wt + handballs * p$handballs_wt + metres_gained * p$metres_gained_wt +
-                 turnovers * p$turnovers_wt + goal_assists * p$goal_assists_wt +
-                 goals * p$goals_wt + behinds * p$behinds_wt + shots_at_goal * p$shots_at_goal_wt,
-      epv_spoil = tidyr::replace_na(epv_spoil, 0),
-      epv_hitout = tidyr::replace_na(epv_hitout, 0),
-      epv = epv_recv + epv_disp + epv_spoil + epv_hitout
-    )
-  }
+      epv_recv = tidyr::replace_na(np_won, 0),
+      epv_disp = tidyr::replace_na(np_own, 0),
+      epv_spoil = tidyr::replace_na(np_pool, 0),
+      epv_hitout = 0,
+      epv = epv_recv + epv_disp + epv_spoil + epv_hitout,
+      net_points = tidyr::replace_na(net_points, 0)
+    ) |>
+    dplyr::select(-dplyr::any_of(c("np_own", "np_won", "np_pool")))
+  gap <- max(abs(plyr_gm_df$epv - plyr_gm_df$net_points))
+  if (gap > 1e-8) cli::cli_abort("v4 channels do not sum to net points (max gap {signif(gap, 3)}).")
 
   # WPA is engine-independent -- it reads the WP model, not the EPV channels.
   # Skipped when create_wp_credit() failed: see wp_failed above.
@@ -1439,13 +1193,15 @@ create_player_game_data <- function(pbp_data = NULL,
       wp_credit_adj, wp_disp_credit_adj, wp_recv_credit_adj,
       # WPA (raw)
       wp_credit, wp_disp_credit, wp_recv_credit,
-      # Contest credit (3-way aerial split)
+      # Retired v2 contest credit (3-way aerial split): always zero under v4,
+      # kept because the released schema declares it
       contest_epv, aerial_target_wins, aerial_target_losses,
       aerial_def_wins, aerial_def_losses,
-      # Contextual spoil credit (WS2a — not yet folded into epv_spoil)
+      # Retired v2 contextual spoil credit (WS2a): always zero under v4
       spoil_epv_ctx, spoils_priced,
-      # v3 only. Kept under any_of() so v2 output keeps its declared schema
-      # exactly — column_schema.R would reject the extras on a released frame.
+      # Under any_of() so the output keeps its declared schema exactly --
+      # column_schema.R would reject extras on a released frame. Only
+      # net_points is produced now; the other four were v3's.
       dplyr::any_of(c("epv_cont_aerial", "epv_cont_stop",
                       "contests_won", "contests_lost", "net_points")),
       # WPA ledger (Step 3c). any_of() for the same schema reason as above.
@@ -1523,323 +1279,4 @@ create_player_game_data <- function(pbp_data = NULL,
   # request, so the default frame is unchanged; strip it before a parquet write.
   if (isTRUE(keep_np_fit)) attr(plyr_gm_df, "np_fit") <- np_fit_used
   return(plyr_gm_df)
-}
-
-#' Compute Contest Credit from Aerial Contests
-#'
-#' Joins aerial contest data back to PBP to get the kicker's \code{delta_epv},
-#' then splits credit three ways: kicker, target, and defender. When an opponent
-#' is involved (spoil, intercept mark), each gets 1/3 of the EPV at stake.
-#' The target and defender receive credit from their own team's perspective
-#' (positive if they won, negative if they lost).
-#'
-#' Only applies to contests with a 3rd player from the opposing team. When
-#' the target takes the mark themselves (no opponent), the standard 50/50
-#' kicker/receiver split is unchanged.
-#'
-#' @param chains Raw chains data (from \code{load_chains()}).
-#' @param pbp_data Clean PBP data (from \code{load_pbp()}) containing
-#'   \code{delta_epv} values.
-#' @param contest_share Fraction of \code{delta_epv} attributed to each
-#'   contest participant. Default \code{1/3}.
-#'
-#' @return A data.table with columns: \code{player_id}, \code{match_id},
-#'   \code{contest_epv} (positive for winners, negative for losers),
-#'   \code{aerial_target_wins}, \code{aerial_target_losses},
-#'   \code{aerial_def_wins}, \code{aerial_def_losses}.
-#'
-#' @keywords internal
-compute_contest_credit <- function(chains, pbp_data, contest_share = 1 / 3) {
-  empty_dt <- data.table::data.table(
-    player_id = character(), match_id = character(),
-    contest_epv = numeric(),
-    aerial_target_wins = integer(), aerial_target_losses = integer(),
-    aerial_def_wins = integer(), aerial_def_losses = integer()
-  )
-
-  chains_dt <- data.table::as.data.table(chains)
-  pbp_dt <- data.table::as.data.table(pbp_data)
-
-  detect_chains_columns(chains_dt)
-
-  target_descs <- CHAINS_CONTEST_TARGET_DESCS
-  kick_descs <- c("Kick", "Ground Kick")
-  data.table::setorder(chains_dt, match_id, display_order)
-
-  # Build shift columns for forward (outcome) and backward (kicker) lookup
-  chains_dt[, `:=`(
-    .next_desc = data.table::shift(description, 1L, type = "lead"),
-    .next_pid  = data.table::shift(player_id, 1L, type = "lead"),
-    .next_tid  = data.table::shift(team_id, 1L, type = "lead"),
-    .next_x    = data.table::shift(x, 1L, type = "lead"),
-    .next_y    = data.table::shift(y, 1L, type = "lead"),
-    .lag1_desc = data.table::shift(description, 1L, type = "lag"),
-    .lag2_desc = data.table::shift(description, 2L, type = "lag"),
-    .lag3_desc = data.table::shift(description, 3L, type = "lag"),
-    .lag4_desc = data.table::shift(description, 4L, type = "lag"),
-    .lag5_desc = data.table::shift(description, 5L, type = "lag"),
-    .lag1_do   = data.table::shift(display_order, 1L, type = "lag"),
-    .lag2_do   = data.table::shift(display_order, 2L, type = "lag"),
-    .lag3_do   = data.table::shift(display_order, 3L, type = "lag"),
-    .lag4_do   = data.table::shift(display_order, 4L, type = "lag"),
-    .lag5_do   = data.table::shift(display_order, 5L, type = "lag")
-  ), by = match_id]
-
-  # Filter to contest target rows with opposing-team outcome at same x,y
-  contests <- chains_dt[
-    description %in% target_descs &
-    !is.na(player_id) &
-    !is.na(.next_tid) &
-    x == .next_x & y == .next_y &
-    team_id != .next_tid &
-    !is.na(.next_pid)
-  ]
-
-  if (nrow(contests) == 0) {
-    chains_dt[, grep("^\\.", names(chains_dt), value = TRUE) := NULL]
-    return(empty_dt)
-  }
-
-  # Find the kicker's display_order (first Kick/Ground Kick within 5 rows back)
-  # The scan may only pass through in-flight annotation rows, exactly as
-  # compute_spoil_credit() does: a possession event (Handball, Mark, an earlier
-  # Spoil, ...) between the kick and the contest means the kick further back
-  # belongs to a different play, and crediting it would pay the contest with
-  # the swing of a kick it never touched.
-  inflight <- CHAINS_INFLIGHT_DESCS
-  contests[, `:=`(
-    .clear2 = .lag1_desc %chin% inflight,
-    .clear3 = .lag1_desc %chin% inflight & .lag2_desc %chin% inflight,
-    .clear4 = .lag1_desc %chin% inflight & .lag2_desc %chin% inflight &
-              .lag3_desc %chin% inflight,
-    .clear5 = .lag1_desc %chin% inflight & .lag2_desc %chin% inflight &
-              .lag3_desc %chin% inflight & .lag4_desc %chin% inflight
-  )]
-  contests[, kick_display_order := data.table::fcase(
-    .lag1_desc %chin% kick_descs, .lag1_do,
-    .clear2 & .lag2_desc %chin% kick_descs, .lag2_do,
-    .clear3 & .lag3_desc %chin% kick_descs, .lag3_do,
-    .clear4 & .lag4_desc %chin% kick_descs, .lag4_do,
-    .clear5 & .lag5_desc %chin% kick_descs, .lag5_do,
-    default = NA_integer_
-  )]
-
-  # Build triples table (drop rows without a matched kick)
-  triples_dt <- contests[!is.na(kick_display_order), .(
-    match_id,
-    kick_display_order,
-    target_player_id = player_id,
-    target_team_id = team_id,
-    defender_player_id = .next_pid,
-    defender_team_id = .next_tid,
-    outcome_desc = .next_desc
-  )]
-
-  # Clean up temp columns
-  chains_dt[, grep("^\\.", names(chains_dt), value = TRUE) := NULL]
-
-  if (nrow(triples_dt) == 0) return(empty_dt)
-
-  # Join to PBP to get delta_epv from the kicker's row
-  triples_dt <- merge(
-    triples_dt,
-    pbp_dt[, .(match_id, display_order, delta_epv)],
-    by.x = c("match_id", "kick_display_order"),
-    by.y = c("match_id", "display_order"),
-    all.x = TRUE, sort = FALSE
-  )
-  # Drop rows without delta_epv (shouldn't happen but safety) -- and say so
-  n_no_epv <- sum(is.na(triples_dt$delta_epv))
-  if (n_no_epv > 0) {
-    cli::cli_alert_warning(
-      "Contest credit: dropped {n_no_epv} of {nrow(triples_dt)} contest{?s} whose kick has no {.field delta_epv} in the play-by-play.")
-  }
-  triples_dt <- triples_dt[!is.na(delta_epv)]
-  if (nrow(triples_dt) == 0) return(empty_dt)
-
-  # Compute credit: delta_epv is from kicker's team perspective
-  # Target (same team as kicker): credit = delta_epv * share
-  # Defender (opp team): credit = -delta_epv * share (flip perspective)
-  share <- contest_share
-
-  # Build per-player rows: one for target, one for defender
-  target_credit <- triples_dt[, .(
-    player_id = target_player_id,
-    match_id = match_id,
-    contest_epv = delta_epv * share,
-    is_target = TRUE
-  )]
-  defender_credit <- triples_dt[, .(
-    player_id = defender_player_id,
-    match_id = match_id,
-    contest_epv = -delta_epv * share,
-    is_target = FALSE
-  )]
-  all_credit <- data.table::rbindlist(list(target_credit, defender_credit))
-
-  # Aggregate per player per match
-  all_credit[, .(
-    contest_epv = sum(contest_epv),
-    aerial_target_wins = sum(is_target & contest_epv > 0),
-    aerial_target_losses = sum(is_target & contest_epv <= 0),
-    aerial_def_wins = sum(!is_target & contest_epv > 0),
-    aerial_def_losses = sum(!is_target & contest_epv <= 0)
-  ), by = .(player_id, match_id)]
-}
-
-
-#' Compute Contextual Spoil Credit
-#'
-#' Prices every spoil by the expected-points swing of the kick it defused,
-#' rather than by a flat per-spoil weight.
-#'
-#' \code{compute_contest_credit()} already prices contests contextually, but its
-#' filter keys on \code{CHAINS_CONTEST_TARGET_DESCS}, which matches only ~28% of
-#' spoils — the largest group of spoils simply follows a plain \code{"Kick"} row.
-#' This function reaches the rest: it locates every \code{"Spoil"} in chains, scans
-#' back up to 5 rows for the kick that produced it (the same scan
-#' \code{compute_contest_credit()} uses), and credits the spoiler
-#' \code{-delta_epv * contest_share} — the identical sign convention, so the two
-#' quantities are on the same scale and can be summed.
-#'
-#' Spoils already captured as contest triples are excluded, so this never
-#' double-counts against \code{contest_epv}.
-#'
-#' The credit is \strong{signed}: a spoil on a kick that was still good for the
-#' attacking team earns negative credit. About 40% of spoils fall in that group,
-#' which is the discrimination a flat weight cannot express.
-#'
-#' @param chains Raw chains data (from \code{load_chains()}).
-#' @param pbp_data Clean PBP data (from \code{load_pbp()}) containing
-#'   \code{delta_epv} values.
-#' @param contest_share Fraction of \code{delta_epv} attributed to the spoiler.
-#'   Default \code{1/3}, matching \code{compute_contest_credit()}.
-#'
-#' @return A data.table with columns: \code{player_id}, \code{match_id},
-#'   \code{spoil_epv_ctx} (signed contextual credit, summed per player-match),
-#'   \code{spoils_priced} (spoils this function valued).
-#'
-#' @keywords internal
-compute_spoil_credit <- function(chains, pbp_data, contest_share = 1 / 3) {
-  empty_dt <- data.table::data.table(
-    player_id = character(), match_id = character(),
-    spoil_epv_ctx = numeric(), spoils_priced = integer()
-  )
-
-  chains_dt <- data.table::as.data.table(chains)
-  pbp_dt <- data.table::as.data.table(pbp_data)
-
-  detect_chains_columns(chains_dt)
-
-  target_descs <- CHAINS_CONTEST_TARGET_DESCS
-  kick_descs <- c("Kick", "Ground Kick")
-  data.table::setorder(chains_dt, match_id, display_order)
-
-  chains_dt[, `:=`(
-    .prev_desc = data.table::shift(description, 1L, type = "lag"),
-    .prev_tid  = data.table::shift(team_id, 1L, type = "lag"),
-    .prev_x    = data.table::shift(x, 1L, type = "lag"),
-    .prev_y    = data.table::shift(y, 1L, type = "lag"),
-    .lag1_desc = data.table::shift(description, 1L, type = "lag"),
-    .lag2_desc = data.table::shift(description, 2L, type = "lag"),
-    .lag3_desc = data.table::shift(description, 3L, type = "lag"),
-    .lag4_desc = data.table::shift(description, 4L, type = "lag"),
-    .lag5_desc = data.table::shift(description, 5L, type = "lag"),
-    .lag1_do   = data.table::shift(display_order, 1L, type = "lag"),
-    .lag2_do   = data.table::shift(display_order, 2L, type = "lag"),
-    .lag3_do   = data.table::shift(display_order, 3L, type = "lag"),
-    .lag4_do   = data.table::shift(display_order, 4L, type = "lag"),
-    .lag5_do   = data.table::shift(display_order, 5L, type = "lag"),
-    .lag1_tid  = data.table::shift(team_id, 1L, type = "lag"),
-    .lag2_tid  = data.table::shift(team_id, 2L, type = "lag"),
-    .lag3_tid  = data.table::shift(team_id, 3L, type = "lag"),
-    .lag4_tid  = data.table::shift(team_id, 4L, type = "lag"),
-    .lag5_tid  = data.table::shift(team_id, 5L, type = "lag")
-  ), by = match_id]
-
-  # Exclude spoils compute_contest_credit() already priced: those are the
-  # outcome row of a contest triple (previous row is a contest target at the
-  # same coordinates, logged to the opposing team).
-  spoils <- chains_dt[
-    description == "Spoil" &
-    !is.na(player_id) &
-    !(.prev_desc %chin% target_descs &
-      x == .prev_x & y == .prev_y &
-      !is.na(.prev_tid) & team_id != .prev_tid)
-  ]
-
-  cleanup <- function() {
-    chains_dt[, grep("^\\.", names(chains_dt), value = TRUE) := NULL]
-  }
-  if (nrow(spoils) == 0) {
-    cleanup()
-    return(empty_dt)
-  }
-
-  # First Kick/Ground Kick within 5 rows back, and the team that kicked it.
-  # The scan may only pass through in-flight annotation rows: if a possession
-  # event (Handball, Mark, an earlier Spoil, ...) sits in between, the kick
-  # further back belongs to a different play and crediting it would attribute
-  # a spoil to a kick it never touched.
-  inflight <- CHAINS_INFLIGHT_DESCS
-  spoils[, `:=`(
-    .clear2 = .lag1_desc %chin% inflight,
-    .clear3 = .lag1_desc %chin% inflight & .lag2_desc %chin% inflight,
-    .clear4 = .lag1_desc %chin% inflight & .lag2_desc %chin% inflight &
-              .lag3_desc %chin% inflight,
-    .clear5 = .lag1_desc %chin% inflight & .lag2_desc %chin% inflight &
-              .lag3_desc %chin% inflight & .lag4_desc %chin% inflight
-  )]
-  spoils[, .kick_lag := data.table::fcase(
-    .lag1_desc %chin% kick_descs, 1L,
-    .clear2 & .lag2_desc %chin% kick_descs, 2L,
-    .clear3 & .lag3_desc %chin% kick_descs, 3L,
-    .clear4 & .lag4_desc %chin% kick_descs, 4L,
-    .clear5 & .lag5_desc %chin% kick_descs, 5L,
-    default = NA_integer_
-  )]
-  spoils[, `:=`(
-    kick_display_order = data.table::fcase(
-      .kick_lag == 1L, .lag1_do, .kick_lag == 2L, .lag2_do,
-      .kick_lag == 3L, .lag3_do, .kick_lag == 4L, .lag4_do,
-      .kick_lag == 5L, .lag5_do
-    ),
-    kick_team_id = data.table::fcase(
-      .kick_lag == 1L, .lag1_tid, .kick_lag == 2L, .lag2_tid,
-      .kick_lag == 3L, .lag3_tid, .kick_lag == 4L, .lag4_tid,
-      .kick_lag == 5L, .lag5_tid
-    )
-  )]
-
-  # A spoil is only meaningful against an opponent's kick. Same-team matches are
-  # chain-logging artifacts (~16%) and are dropped rather than credited.
-  spoils <- spoils[!is.na(kick_display_order) &
-                   !is.na(kick_team_id) &
-                   team_id != kick_team_id,
-                   .(match_id, player_id, kick_display_order)]
-  cleanup()
-  if (nrow(spoils) == 0) return(empty_dt)
-
-  spoils <- merge(
-    spoils,
-    pbp_dt[, .(match_id, display_order, delta_epv)],
-    by.x = c("match_id", "kick_display_order"),
-    by.y = c("match_id", "display_order"),
-    all.x = TRUE, sort = FALSE
-  )
-  n_no_epv <- sum(is.na(spoils$delta_epv))
-  if (n_no_epv > 0) {
-    cli::cli_alert_warning(
-      "Spoil credit: dropped {n_no_epv} of {nrow(spoils)} spoil{?s} whose kick has no {.field delta_epv} in the play-by-play.")
-  }
-  spoils <- spoils[!is.na(delta_epv)]
-  if (nrow(spoils) == 0) return(empty_dt)
-
-  # delta_epv is from the kicking team's perspective; flip it for the spoiler,
-  # matching compute_contest_credit()'s defender convention exactly.
-  spoils[, .credit := -delta_epv * contest_share]
-  spoils[, .(
-    spoil_epv_ctx = sum(.credit),
-    spoils_priced = .N
-  ), by = .(player_id, match_id)]
 }

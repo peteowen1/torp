@@ -126,9 +126,11 @@
     # ONLY UNDER v3: loser_pid is consumed in compute_aerial_credit(), which
     # player_credit.R:658 calls inside `if (v3)`, and v4 drops target_pid before
     # the ledger sees it (measured: the difficulty terms are byte-identical with
-    # the flag on and off). It is wired anyway because EPV_ENGINE is selectable
-    # and it does move ratings on that path -- rating-defining on any
-    # live-selectable path is still rating-defining.
+    # the flag on and off). It was wired because EPV_ENGINE was selectable and
+    # it moved ratings on that path. (v3 and compute_aerial_credit() were removed
+    # on 2026-11-16; the entry stays so the manifest is unchanged until the next
+    # vintage. EPV3_CHANNELS, EPV_CONT_LOSS_ALLOC and EPV_DIFFICULTY_SPLIT below
+    # are in the same position: nothing reads them any more.)
     #
     # THAT MEASUREMENT IS CONDITIONAL ON EPV3_CONTEST_POPULATION = "all", and
     # stops holding the moment "evidence" is promoted (review finding,
@@ -250,10 +252,11 @@
     # EPV_DIFFICULTY_DESCS (build_disposal_events()), so that one moves v4
     # ratings. The SURPRISE constants do NOT move v4: score_disposals() applies
     # them to disp_credit/recv_credit, but the v4 path keeps only p_hat,
-    # decision and surprise (epv_net_points.R). They are read through
+    # decision and surprise (epv_net_points.R). They were also read through
     # compute_difficulty_credit(), behind EPV_DIFFICULTY_SPLIT on the v2/v3
-    # path (player_credit.R). Wired anyway because EPV_ENGINE is selectable and
-    # a selectable path counts (the EPV3_TARGET_FROM_I50 precedent above).
+    # path, which was removed on 2026-11-16; EPV_DIFFICULTY_SPLIT is now read
+    # by nothing and stays only so the manifest is unchanged until the next
+    # vintage.
     EPV_DIFFICULTY_DESCS = EPV_DIFFICULTY_DESCS,
     EPV_DIFFICULTY_SURPRISE_SHARE = EPV_DIFFICULTY_SURPRISE_SHARE,
     EPV_DIFFICULTY_SURPRISE_BY_TYPE = EPV_DIFFICULTY_SURPRISE_BY_TYPE,
