@@ -146,7 +146,21 @@ jobs:
             }, x)
             if (length(good) == 0) stop("All coverage trace files are corrupt")
             covr:::merge_coverage(lapply(good, function(f) {
-              as.list(suppressWarnings(readRDS(f)))
+              tr <- as.list(suppressWarnings(readRDS(f)))
+              # covr 4.0.0's clean_coverage_tests() reads `$tests` on every
+              # entry and dies on a non-list one ("$ operator is invalid for
+              # atomic vectors", torp#319, twice on the same commit, not
+              # reproducible locally on Windows). Such an entry is not a line
+              # counter, so log what it is and drop it.
+              bad <- !vapply(tr, is.list, logical(1))
+              if (any(bad)) {
+                message("Dropping ", sum(bad), " non-counter entr", if (sum(bad) == 1) "y" else "ies",
+                        " from covr trace ", basename(f), ": ",
+                        paste(head(sprintf("%s <%s>", names(tr)[bad], vapply(tr[bad], function(v) class(v)[1], "")), 10),
+                              collapse = ", "))
+                tr <- tr[!bad]
+              }
+              tr
             }))
           }, envir = ns)
           lockBinding("merge_coverage.character", ns)
