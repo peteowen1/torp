@@ -10,7 +10,8 @@ load_from_url(
   seasons = TRUE,
   rounds = TRUE,
   use_disk_cache = FALSE,
-  columns = NULL
+  columns = NULL,
+  abort_on_transient = FALSE
 )
 }
 \arguments{
@@ -27,6 +28,11 @@ load_from_url(
 \item{columns}{Optional character vector of column names to read. If NULL (default),
 reads all columns. Filter columns (season, round, round_number, week) are
 auto-included when filtering is active.}
+
+\item{abort_on_transient}{Logical. If TRUE, a result with zero rows caused by
+failed (non-404) downloads aborts with a \code{vb_error_transient} error instead
+of returning an empty frame with a warning. A confirmed 404 (file not
+published) still returns empty. Default FALSE.}
 }
 \value{
 A tibble
