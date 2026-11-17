@@ -11,7 +11,8 @@
 #     for earlier years, so a pick later pushed back by compensation picks or
 #     bids is valued a few places too early.)
 #   - Future pick: as in 05, from the original club's ladder finish that
-#     season, half-way to the middle for next year and mid-round after that,
+#     season, keeping LADDER_CARRY of its distance from the middle (half for
+#     next year, a third the year after; measured, see 05),
 #     plus the Tasmania shift for 2027 and 2028 picks, discounted a season per
 #     year of wait. A priority pick with a stated number uses that number.
 #   - Value to club: the same stay curves as 05.
