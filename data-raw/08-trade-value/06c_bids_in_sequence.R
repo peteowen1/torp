@@ -32,6 +32,9 @@
 # A bid is entered as the STARTING pick it is made with (and so which club
 # bids). If that pick has gone by then, the next pick still in the order bids.
 #
+# Scenarios: A (Richmond bids on Walker), B (Essendon does), P (Cal Twomey's
+# Phantom Draft bids, 2026-11-17) and Q (P after his GWS-Port pick-12 trade).
+#
 # Output: torpdata/data/raw/trade_value/06c_bids_in_sequence.csv (gitignored)
 
 suppressMessages(library(data.table))
@@ -203,6 +206,12 @@ cat("compensation picks handed out: A", attr(A, "comp"), "| B", attr(B, "comp"),
 # 4. The Phantom's Cochrane and Walker bids are scenario A's.
 stopifnot(identical(P[player %in% c("Dougie Cochrane", "Cody Walker"), .(bid_live, cost_points, deficit_points)],
                     A[player %in% c("Dougie Cochrane", "Cody Walker"), .(bid_live, cost_points, deficit_points)]))
+# 5. Q's Cochrane bid is the same pick and price as A's; only how Port pays
+#    changes (7+20 after the pick-12 trade, 400 short).
+qc <- Q[player == "Dougie Cochrane"]
+stopifnot(qc$bid_live == a1$bid_live, qc$cost_points == a1$cost_points, qc$used_start == "7+20",
+          qc$deficit_points == 400, qc$can_match)
+cat("anchors hold: Phantom Cochrane/Walker equal A; Q Cochrane 1 / 2,700 / 7+20 / 400 short\n")
 cat("Phantom live picks (P): ", paste(P$player, P$bid_live, collapse = "; "), "\n")
 both <- rbind(A, B, P, Q)
 fwrite(both, file.path(out_dir, "06c_bids_in_sequence.csv"))
