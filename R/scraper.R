@@ -431,7 +431,19 @@ get_players <- function(season = TRUE, use_api = FALSE) {
     players <- players |>
       dplyr::mutate(season = get_afl_season())
   } else {
-    players <- load_player_details(seasons = season) |>
+    details <- load_player_details(seasons = season)
+    # In lenient (non-strict) mode a timed-out player-details call comes back as
+    # a zero-column tibble with only a warning. Selecting `player_id` from it
+    # used to die with an unrelated "column doesn't exist" error, deep in the
+    # chains join (issue #314). Say what actually happened instead.
+    if (nrow(details) == 0 || !"player_id" %in% names(details)) {
+      cli::cli_abort(c(
+        "No player details were loaded for season {.val {season}}.",
+        "i" = "The player-details call most likely timed out or failed (see earlier warnings). Chains cannot be joined to players without it.",
+        "i" = "Retry, or pass {.code refresh = TRUE} to {.fn load_player_details} first."
+      ))
+    }
+    players <- details |>
       dplyr::mutate(
         photoURL = NA,
         team.teamId = NA,

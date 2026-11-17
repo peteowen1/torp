@@ -1,3 +1,7 @@
+# torp 1.11.3
+
+* `load_pbp()` stops with a `vb_error_transient` error when every download failed for a reason other than "not published" (404), instead of returning a 0-row frame that callers read as "no play-by-play". A genuine 404 still returns empty. Other loaders keep the old behaviour; it is opt-in through the new `load_from_url(abort_on_transient = TRUE)`. `get_players()` (used by `get_match_chains()`) now stops with a plain message when player details come back empty, for example after a timed-out call, instead of failing later on a missing `player_id` column. torp#314; the Grand Final lineup path in that issue is still open.
+
 # torp 1.11.2
 
 * Every play-by-play build now records which EP and WP models scored it. Each row carries `pbp_model_id`, a short hash of the sha256s of the `ep_model`, `wp_model` and `wp_calibration` files actually loaded ("unstamped" when one is missing), and `pbp_model_stamps.json` on the `pbp-data` release lists the ids per season. When there is no new game, the daily release reports any season not wholly on the currently published models; it rebuilds nothing. Prompted by finding 2021-2025 on models older than the 2026-07-22 uploads (stored `exp_pts` differed from a fresh build on 14,554 of 14,771 rows of 2025 round 10); rebuilding them is part of rating vintage v18. Published numbers are unchanged; play-by-play gains one column.

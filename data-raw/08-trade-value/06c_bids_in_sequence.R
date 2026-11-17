@@ -32,6 +32,9 @@
 # A bid is entered as the STARTING pick it is made with (and so which club
 # bids). If that pick has gone by then, the next pick still in the order bids.
 #
+# Scenarios: A (Richmond bids on Walker), B (Essendon does), P (Cal Twomey's
+# Phantom Draft bids, 2026-11-17) and Q (P after his GWS-Port pick-12 trade).
+#
 # Output: torpdata/data/raw/trade_value/06c_bids_in_sequence.csv (gitignored)
 
 suppressMessages(library(data.table))
@@ -160,6 +163,29 @@ cB <- copy(cands); cB[player == "Cody Walker", bid_start := 1L]
 cB <- cB[order(bid_start, player != "Dougie Cochrane")]
 B <- run_sequence(cB, "B: Essendon bids on Walker")
 
+# Scenario P: Cal Twomey's Phantom Draft (AFL.com.au news 1640523, 2026-11-17,
+# raw copy torpdata/data/raw/trades_2026/official/afl_1640523_*). Bids entered
+# as the bidding club's starting pick: Essendon 1 on Cochrane, Richmond 2 on
+# Walker (live 3), Melbourne 4 on Matthews (live 6), Melbourne 14 on Murray
+# (live 13). Not bid inside his top 30, but named as possible: West Coast on
+# Boi with a mid-20s pick (starting 23) and Port on El Souki (starting 24).
+# Justice stays at 37 (Essendon "keen to match a bid", no position given).
+cP <- copy(cands)
+cP[player == "Ethan Matthews", bid_start := 4L]
+cP[player == "Caylen Murray", bid_start := 14L]
+cP[player == "Keenan Boi", bid_start := 23L]
+cP[player == "Khaled El Souki", bid_start := 24L]
+setorder(cP, bid_start)
+P <- run_sequence(cP, "P: Phantom Draft bids")
+# Scenario Q: as P, after the trade Twomey has going through at the start of
+# the draft: GWS sends starting picks 20 and 26 (and a future second) to Port
+# for Port's pick 12. Brisbane's planned trade of pick 21 has no named partner,
+# so it is not modelled.
+start_saved <- start
+start <- copy(start)[start == 12L, club := "GWS"][start %in% c(20L, 26L), club := "PORT"]
+Q <- run_sequence(cP, "Q: Phantom + GWS gets pick 12 for 20 and 26")
+start <- start_saved
+
 # ---- Anchors, written before the first run ----
 # 1. The first bid has nothing ahead of it, so it must equal 06's row exactly.
 a1 <- A[player == "Dougie Cochrane"]; r1 <- e$res[player == "Dougie Cochrane"]
@@ -177,7 +203,17 @@ stopifnot(bw$bid_live == 2, bw$cost_points == 2481, bw$deficit_points == 462, !b
 cat("anchors hold: Cochrane equals 06; Walker 3 / 12+17 / 159 (A); Walker 2 / 462 / no (B)\n")
 cat("compensation picks handed out: A", attr(A, "comp"), "| B", attr(B, "comp"), "\n\n")
 
-both <- rbind(A, B)
+# 4. The Phantom's Cochrane and Walker bids are scenario A's.
+stopifnot(identical(P[player %in% c("Dougie Cochrane", "Cody Walker"), .(bid_live, cost_points, deficit_points)],
+                    A[player %in% c("Dougie Cochrane", "Cody Walker"), .(bid_live, cost_points, deficit_points)]))
+# 5. Q's Cochrane bid is the same pick and price as A's; only how Port pays
+#    changes (7+20 after the pick-12 trade, 400 short).
+qc <- Q[player == "Dougie Cochrane"]
+stopifnot(qc$bid_live == a1$bid_live, qc$cost_points == a1$cost_points, qc$used_start == "7+20",
+          qc$deficit_points == 400, qc$can_match)
+cat("anchors hold: Phantom Cochrane/Walker equal A; Q Cochrane 1 / 2,700 / 7+20 / 400 short\n")
+cat("Phantom live picks (P): ", paste(P$player, P$bid_live, collapse = "; "), "\n")
+both <- rbind(A, B, P, Q)
 fwrite(both, file.path(out_dir, "06c_bids_in_sequence.csv"))
 old <- e$res[, .(player, old_cost = cost_points, old_deficit = deficit_points, old_can = can_match, old_gain = gain_torp)]
 show <- merge(both, old, by = "player")[order(scenario, bid_live)]
