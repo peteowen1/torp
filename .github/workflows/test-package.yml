@@ -137,6 +137,13 @@ jobs:
           # can produce truncated gzip when saveRDS runs out of memory)
           ns <- asNamespace("covr")
           unlockBinding("merge_coverage.character", ns)
+          # Keep covr's OWN merge and only filter the file list. covr 4.0.0 writes
+          # some traces as `covr_counts` objects (`counters_file` + `counts`) that
+          # its merge_coverage.character() joins back to their counters; an older
+          # copy of the merge, used here until 2026-11-17, crashed on them in
+          # clean_coverage_tests() ("$ operator is invalid for atomic vectors",
+          # torp#319). Wrapping the original works on covr 3 and 4 alike.
+          orig_merge <- get("merge_coverage.character", envir = ns)
           assign("merge_coverage.character", function(x, ...) {
             good <- Filter(function(f) {
               tryCatch({ readRDS(f); TRUE }, error = function(e) {
@@ -145,9 +152,7 @@ jobs:
               })
             }, x)
             if (length(good) == 0) stop("All coverage trace files are corrupt")
-            covr:::merge_coverage(lapply(good, function(f) {
-              as.list(suppressWarnings(readRDS(f)))
-            }))
+            orig_merge(good, ...)
           }, envir = ns)
           lockBinding("merge_coverage.character", ns)
 
@@ -165,7 +170,12 @@ jobs:
             clean = FALSE,
             install_path = file.path(Sys.getenv("RUNNER_TEMP"), "package")
           )
-          covr::codecov(coverage = cov, quiet = FALSE)
+          message("Line coverage: ", round(covr::percent_coverage(cov), 2), "%")
+          # The upload is a report, not a test: there is no CODECOV_TOKEN secret, and
+          # Codecov rejects tokenless uploads outright at times (HTTP 400, torp#319)
+          # where it used to answer "rate limit reached" and let the step pass.
+          tryCatch(covr::codecov(coverage = cov, quiet = FALSE),
+                   error = function(e) message("Codecov upload skipped: ", conditionMessage(e)))
         shell: Rscript {0}
 
       - name: Show testthat output
