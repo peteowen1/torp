@@ -209,9 +209,11 @@ if (run_chains) {
         add_shot_vars() |>
         add_epv_vars() |>
         clean_model_data_wp() |>
-        add_wp_vars()
+        add_wp_vars() |>
+        .stamp_pbp_models()
 
       save_to_release(pbp, paste0("pbp_data_", season, "_all"), "pbp-data")
+      .record_pbp_model_stamps(season, pbp)
       cli::cli_inform("  pbp_{season}: {nrow(pbp)} rows")
     })
 
