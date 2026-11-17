@@ -5,9 +5,9 @@
 #   - Player: v8_mean from 03_project_value.R.
 #   - 2026 pick N: the eight-season pick curve from 04_pick_curve.R at N.
 #   - Future pick (year Y, round R, original club C): expected position
-#     (R - 1) x 18 + slot, where slot comes from C's 2026 ladder finish pulled
-#     halfway to the middle for 2027 and all the way for 2028 (ladders persist
-#     only partly); plus a talent shift for Tasmania's pre-signed 17-year-olds
+#     (R - 1) x 18 + slot, where slot is C's 2026 ladder finish pulled toward
+#     the middle by LADDER_CARRY: half of its distance from the middle is kept
+#     for 2027, a third for 2028 (measured; see LADDER_CARRY below); plus a talent shift for Tasmania's pre-signed 17-year-olds
 #     (7 signed from the 2027 class so far, up to 12 across 2026-27: +8 picks
 #     in 2027, +5 in 2028; my reading of the rules, not an AFL figure); then
 #     discounted one season per year of wait. ABC's "about a round" (+18) is
@@ -23,6 +23,13 @@ raw_dir <- "C:/dev/torpverse/torpdata/data/raw/trades_2026"
 out_dir <- "C:/dev/torpverse/torpdata/data/raw/trade_value"
 disc <- 0.9
 TAS_SHIFT <- c(`2027` = 8, `2028` = 5)
+# Share of a club's distance from the middle of the ladder (slot 9.5) that is
+# still there 1 and 2 seasons later: regression through the origin on AFL
+# ladders 2018-2026 (the seasons get_afl_ladder() serves), 144 and 126 club
+# pairs: 0.506 (SE 0.072) and 0.337 (SE 0.084); leaving out any one season
+# moves them by at most 0.03 and 0.04. Measured 2026-11-17. Until then 2028
+# picks were valued as a mid-table club's (carry 0).
+LADDER_CARRY <- c(0.5, 0.34)
 
 proj <- fread(file.path(out_dir, "03_projected_value_2026.csv"))
 curve <- fread(file.path(out_dir, "04_pick_curve.csv"))
@@ -94,7 +101,8 @@ a[type == "future_pick", abbr := torp_team_abbr(orig_club)]
 a <- merge(a, lad, by = "abbr", all.x = TRUE, sort = FALSE)
 stopifnot(a[type == "future_pick", !anyNA(ladder)])
 a[type == "future_pick", slot := 19 - ladder]                    # 18th on the ladder picks first
-a[type == "future_pick", slot := fifelse(year == 2027, 0.5 * slot + 0.5 * 9.5, 9.5)]
+stopifnot(a[type == "future_pick", all((year - 2026L) %in% seq_along(LADDER_CARRY))])
+a[type == "future_pick", slot := 9.5 + LADDER_CARRY[year - 2026L] * (slot - 9.5)]
 a[type == "future_pick", exp_pick := (round - 1) * 18 + slot + TAS_SHIFT[as.character(year)]]
 a[type == "future_pick", exp_pick_abc := (round - 1) * 18 + slot + 18]
 # Pick numbers in the Wikipedia table are as at each trade, and they moved

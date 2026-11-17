@@ -90,10 +90,12 @@ release_pbp_season <- function(season) {
     add_shot_vars() |>
     add_epv_vars() |>
     clean_model_data_wp() |>
-    add_wp_vars()
+    add_wp_vars() |>
+    .stamp_pbp_models()
 
   file_name <- glue::glue("pbp_data_{season}_all")
   save_to_release(df = model_data_wp, file_name = file_name, release_tag = "pbp-data")
+  .record_pbp_model_stamps(season, model_data_wp)
   cli::cli_inform("Saved {file_name} ({nrow(model_data_wp)} rows)")
 }
 

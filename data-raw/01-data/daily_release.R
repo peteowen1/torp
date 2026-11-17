@@ -405,7 +405,8 @@ update_season_pbp <- function(season, round) {
       add_shot_vars() |>
       add_epv_vars() |>
       clean_model_data_wp() |>
-      add_wp_vars()
+      add_wp_vars() |>
+      .stamp_pbp_models()
   }, error = function(e) {
     .record_skip(glue::glue("pbp {season} R{round}"), e)
     return(NULL)
@@ -444,6 +445,7 @@ update_season_pbp <- function(season, round) {
   # the in-process guard's baseline comes from the same read it is checking.
   save_to_release(df = combined, file_name = pbp_all_name, release_tag = "pbp-data",
                   prev_rows_floor = 0.9)
+  .record_pbp_model_stamps(season, combined)
 
   cli::cli_alert_success("Saved {pbp_all_name} ({nrow(combined)} rows)")
   invisible(NULL)
@@ -1117,6 +1119,9 @@ run_daily_release <- function(force = FALSE) {
     # refuses it (torp#307). Refit just that season. Checked before the lineup
     # check so a preseason of daily lineup changes cannot postpone it.
     refit_failures <- .refit_stale_np_fit(current_season)
+    # Report-only: which seasons' play-by-play is on old EP/WP models
+    # (docs/plans/WPA-REFRESH-GUARD.md). Rebuilding 2021-2025 is part of v18.
+    refit_failures <- c(refit_failures, .report_stale_pbp_models(current_season))
     if (has_new_team_data()) {
       release_mode <- "team_only"
     } else {
