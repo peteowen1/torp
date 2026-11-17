@@ -57,6 +57,37 @@ test_that("a season is stale unless every row is on the current models", {
   expect_identical(torp:::.stale_pbp_seasons("cur", list(), 2026:2025), c(2025L, 2026L))
 })
 
+test_that("recording a season round-trips through the stamps file and keeps other seasons", {
+  store <- withr::local_tempdir()
+  published <- character()
+  local_mocked_bindings(
+    get_torp_data_repo = function() "owner/repo",
+    vb_list_assets = function(repo, tag) data.frame(name = list.files(store)),
+    vb_download = function(repo, tag, name, dest, ...) {
+      # Must read without the strict-mode manifest check (the nightly sets
+      # VERSEBUS_STRICT=1 and the manifest commit is best effort).
+      if (!identical(list(...)$require_manifest, FALSE)) stop("strict read: would refuse an uncommitted asset")
+      dir.create(dirname(dest), recursive = TRUE, showWarnings = FALSE)
+      file.copy(file.path(store, name), dest, overwrite = TRUE)
+    },
+    safe_release_upload = function(path, repo, tag, name) file.copy(path, file.path(store, name), overwrite = TRUE),
+    .publish_bus_manifest = function(tag, name, local_path, ...) published <<- c(published, name)
+  )
+  expect_identical(torp:::.read_pbp_model_stamps(), list())               # not published yet
+  expect_true(suppressMessages(torp:::.record_pbp_model_stamps(2025L, data.frame(pbp_model_id = "old"))))
+  expect_true(suppressMessages(torp:::.record_pbp_model_stamps(2026L, data.frame(pbp_model_id = c("cur", "cur")))))
+  expect_true(suppressMessages(torp:::.record_pbp_model_stamps(2024L, data.frame(x = 1))))   # unstamped rows
+  s <- torp:::.read_pbp_model_stamps()
+  expect_identical(s, list(`2024` = "unstamped", `2025` = "old", `2026` = "cur"))
+  expect_identical(torp:::.stale_pbp_seasons("cur", s, 2024:2026), c(2024L, 2025L))
+  expect_identical(published, rep("pbp_model_stamps.json", 3))
+})
+
+test_that("a failed stamps write warns and never errors", {
+  local_mocked_bindings(.read_pbp_model_stamps = function() stop("network down"))
+  expect_false(suppressMessages(torp:::.record_pbp_model_stamps(2026L, data.frame(pbp_model_id = "cur"))))
+})
+
 test_that("the report never fails on stale seasons, and fails only when the check cannot run", {
   expect_identical(
     suppressMessages(torp:::.report_stale_pbp_models(2026L, current_id = "cur", stamps = list(`2026` = "old"))),

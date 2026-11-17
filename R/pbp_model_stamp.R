@@ -147,7 +147,11 @@ PBP_MODEL_UNSTAMPED <- "unstamped"
   if (!PBP_MODEL_STAMPS_ASSET %in% vb_list_assets(repo, "pbp-data")$name) return(list())
   dest <- file.path(tempfile("pbp_stamps_"), PBP_MODEL_STAMPS_ASSET)
   on.exit(unlink(dirname(dest), recursive = TRUE), add = TRUE)
-  vb_download(repo, "pbp-data", PBP_MODEL_STAMPS_ASSET, dest)
+  # The nightly runs with VERSEBUS_STRICT=1, which refuses any asset missing
+  # from bus_manifest.json. The writer commits this file to the manifest, but
+  # that step is best effort, so a missed commit must not fail every later
+  # read (and with it the nightly check and every later stamp write).
+  vb_download(repo, "pbp-data", PBP_MODEL_STAMPS_ASSET, dest, require_manifest = FALSE)
   s <- jsonlite::read_json(dest, simplifyVector = TRUE)
   lapply(s, as.character)
 }
@@ -172,6 +176,10 @@ PBP_MODEL_UNSTAMPED <- "unstamped"
     on.exit(unlink(dirname(path), recursive = TRUE), add = TRUE)
     jsonlite::write_json(stamps, path, auto_unbox = FALSE, pretty = TRUE)
     safe_release_upload(path, repo = get_torp_data_repo(), tag = "pbp-data", name = PBP_MODEL_STAMPS_ASSET)
+    # Commit it to bus_manifest.json like any save_to_release() asset, so strict
+    # readers elsewhere accept it and downloads are checked against its sha256.
+    tryCatch(.publish_bus_manifest("pbp-data", PBP_MODEL_STAMPS_ASSET, path),
+             error = function(e) cli::cli_warn("Could not add {PBP_MODEL_STAMPS_ASSET} to bus_manifest.json: {conditionMessage(e)}"))
     cli::cli_inform("Recorded {season} play-by-play models: {stamps[[as.character(season)]]}")
     TRUE
   }, error = function(e) {
