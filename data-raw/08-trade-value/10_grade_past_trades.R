@@ -11,7 +11,8 @@
 #     for earlier years, so a pick later pushed back by compensation picks or
 #     bids is valued a few places too early.)
 #   - Future pick: as in 05, from the original club's ladder finish that
-#     season, half-way to the middle for next year and mid-round after that,
+#     season, keeping LADDER_CARRY of its distance from the middle (half for
+#     next year, a third the year after; measured, see 05),
 #     plus the Tasmania shift for 2027 and 2028 picks, discounted a season per
 #     year of wait. A priority pick with a stated number uses that number.
 #   - Value to club: the same stay curves as 05.
@@ -30,6 +31,7 @@ raw_dir <- "C:/dev/torpverse/torpdata/data/raw/trades_past"
 out_dir <- "C:/dev/torpverse/torpdata/data/raw/trade_value"
 disc <- 0.9
 TAS_SHIFT <- c(`2027` = 8, `2028` = 5)
+LADDER_CARRY <- c(0.5, 0.34)  # same measured values as 05_grade_trades.R (see there)
 years <- 2021:2025
 
 curve <- fread(file.path(out_dir, "04_pick_curve.csv"))
@@ -66,7 +68,8 @@ grade_year <- function(y) {
   a <- merge(a, lad, by = "abbr", all.x = TRUE, sort = FALSE)
   stopifnot(a[type == "future_pick", !anyNA(ladder)])
   a[type == "future_pick", slot := 19 - ladder]
-  a[type == "future_pick", slot := fifelse(year == y + 1L, 0.5 * slot + 0.5 * 9.5, 9.5)]
+  stopifnot(a[type == "future_pick", all((year - y) %in% seq_along(LADDER_CARRY))])
+  a[type == "future_pick", slot := 9.5 + LADDER_CARRY[year - y] * (slot - 9.5)]
   a[type == "future_pick", exp_pick := (round - 1) * 18 + slot +
       fifelse(as.character(year) %in% names(TAS_SHIFT), TAS_SHIFT[as.character(year)], 0)]
   a[type == "future_pick" & !is.na(stated_pick), exp_pick := stated_pick]
