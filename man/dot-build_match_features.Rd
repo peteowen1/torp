@@ -4,7 +4,7 @@
 \alias{.build_match_features}
 \title{Build match-level features (home ground, familiarity, distance, days rest)}
 \usage{
-.build_match_features(fix_df, team_rt_df, all_grounds)
+.build_match_features(fix_df, team_rt_df, all_grounds, include_xrapm = FALSE)
 }
 \arguments{
 \item{fix_df}{Pivoted fixture df from .build_fixtures_df()}
@@ -12,6 +12,11 @@
 \item{team_rt_df}{Team ratings df from .build_team_ratings_df()}
 
 \item{all_grounds}{Stadium reference data}
+
+\item{include_xrapm}{Carry the team \code{xrapm} sum through to the model frame
+(so \code{xrapm_diff} is real rather than 0). Default \code{FALSE} = production
+today; the switch exists so the xRAPM rolling gate can build its "on" arm
+from the same code (Pete 2026-11-12: turn on only if the gate passes).}
 }
 \value{
 Fixture df enriched with log_dist, familiarity, days_rest, and team ratings
