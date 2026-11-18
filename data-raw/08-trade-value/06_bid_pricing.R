@@ -82,12 +82,15 @@ cat("draft order:", n_order, "picks,", uniqueN(order_tbl$club), "clubs (", order
 # is 1 here; until 2026-11-16 it was 3 and its bids were priced 10% too cheap.
 # The draft order agrees: Brisbane's own first-round pick is last (20), Fremantle
 # 19, Sydney 18, Hawthorn 17. For every other club here the ladder and the
-# finishing position fall in the same band.
+# finishing position fall in the same band. Carlton 8 and the Bulldogs 7 are
+# their places after finals (both lost elimination finals after the wildcard
+# round; inthegame-blog#1244, 18 Nov; they were 10 and 8 here). The loading
+# factor is 1 either way, so no price moves.
 cands <- data.table(
   player = c("Dougie Cochrane", "Cody Walker", "Ethan Matthews", "Caylen Murray", "Khaled El Souki", "Keenan Boi", "Blake Justice"),
   club   = c("PORT", "CARL", "GWS", "BL", "WB", "HAW", "ESS"),
   link   = c("NGA", "father-son", "academy", "academy", "NGA", "NGA", "NGA"),
-  finish = c(15, 10, 12, 1, 8, 4, 18),
+  finish = c(15, 8, 12, 1, 7, 4, 18),
   bid    = c(1, 2, 4, 14, 23, 30, 37))
 stopifnot(all(cands$club %in% order_tbl$club),
           cands[club == "BL", all(finish == 1)])  # premiers: 20% loading, see above
