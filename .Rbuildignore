@@ -22,3 +22,7 @@
 ^scripts$
 ^\.positai$
 ^vignettes/articles$
+^DESIGN-PLANS\.md$
+^FABLE-WPA-DECISION\.md$
+^debug$
+^local-tools$
