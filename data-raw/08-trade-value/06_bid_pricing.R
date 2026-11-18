@@ -12,9 +12,11 @@
 #     (AFL.com.au news 1640440, 2026-11-11; trades_2026/official/final_order_1_80.csv,
 #     raw page saved beside it). The October order (final_order_1_60.csv) differed
 #     at 9 of picks 51-60;
-#   - bid positions from Cal Twomey's November form guide (AFL.com.au news
-#     1640123, 2026-11-11), a ranking and not a mock: Matthews 6, El Souki 23 and
-#     Boi 30 are Pete's call (2026-11-16). Re-check against his Phantom Draft.
+#   - bid positions from Cal Twomey's Late Mail Phantom Draft (AFL.com.au news
+#     1641905, 2026-11-18; Pete's pick of set, 2026-11-19): Cochrane 1 (Essendon),
+#     Walker 2 (Richmond), Matthews 4 (Melbourne; was 6 from his 11 November form
+#     guide), Murray 14 (Melbourne), Justice 37. El Souki 23 and Boi 30 are not
+#     bid in his top 30 and stay at Pete's 16 November positions.
 # The TORP value of a pick is the eight-season curve from 04_pick_curve.R.
 #
 # Matching, simplified: the club hands over its next picks after the bid, in
@@ -86,7 +88,7 @@ cands <- data.table(
   club   = c("PORT", "CARL", "GWS", "BL", "WB", "HAW", "ESS"),
   link   = c("NGA", "father-son", "academy", "academy", "NGA", "NGA", "NGA"),
   finish = c(15, 10, 12, 1, 8, 4, 18),
-  bid    = c(1, 2, 6, 14, 23, 30, 37))
+  bid    = c(1, 2, 4, 14, 23, 30, 37))
 stopifnot(all(cands$club %in% order_tbl$club),
           cands[club == "BL", all(finish == 1)])  # premiers: 20% loading, see above
 
