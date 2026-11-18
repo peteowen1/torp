@@ -74,7 +74,15 @@ def clean_player(cell):
     s = re.sub(r"\{\{\s*sortname\s*\|([^|}]*)\|([^|}]*)[^}]*\}\}", r"\1 \2", s, flags=re.I)
     s = re.sub(r"\[\[(?:[^|\]]*\|)?([^\]]*)\]\]", r"\1", s)
     s = re.sub(r"\{\{[^}]*\}\}|'''?|<[^>]+>", "", s)
+    # Wikipedia is open to edit and this text reaches a public page: drop every
+    # markup character outright rather than trust the one-pass tag strip above.
+    s = re.sub(r"[<>&{}\"\[\]|=\\]", "", s)
     return " ".join(s.split())
+
+
+# A player name is letters (accents allowed), spaces, apostrophes, dots and
+# hyphens, 2-40 characters. Anything else blocks the upload (see check()).
+NAME_OK = re.compile(r"^[A-Za-zÀ-ɏ' .\-]{2,40}$")
 
 
 def fetch_wiki():
@@ -189,6 +197,13 @@ def check(made, last_n):
     bad = [m["club"] for m in made if m["club"] not in CLUBS.values()]
     if bad:
         problems.append(f"unknown club {bad[:3]}")
+    odd = [m["player"] for m in made if not NAME_OK.match(m["player"] or "")]
+    if odd:
+        problems.append(f"implausible player name {odd[:3]!r}")
+    for m in made:  # override rows can carry free text too
+        if m.get("bidding_club") not in (None, *CLUBS.values()):
+            problems.append(f"unknown bidding club {m['bidding_club']!r}")
+            break
     if len(made) < last_n:
         problems.append(f"picks made fell from {last_n} to {len(made)}")
     return problems
