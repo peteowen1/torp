@@ -1,3 +1,7 @@
+# torp 1.11.4
+
+* `run_predictions_pipeline()` stamps match-model provenance through exported torpmodels functions (`torpmodels::build_model_meta()`, `torpmodels::stamp_model_meta()`) instead of `:::`, and needs torpmodels 0.0.7 or later for it (`Suggests: torpmodels (>= 0.0.7)`); with an older or missing torpmodels it uploads unstamped with a warning, as before. `.build_match_features()` gains `include_xrapm = FALSE` so the xRAPM rolling gate can build its "on" arm from the same code; the default is the old fixed value, so match-model inputs are unchanged. The help file for `epv3_aerial_out()` moves to `man/epv3_aerial_out_fn.Rd`, so it no longer collides on Windows with `EPV3_AERIAL_OUT.Rd`. R CMD check goes from 3 NOTEs to 1. New analysis script `data-raw/08-trade-value/04b_pick_curve_flexible.R`. Published numbers are unchanged.
+
 # torp 1.11.3
 
 * `load_pbp()` stops with a `vb_error_transient` error when every download failed for a reason other than "not published" (404), instead of returning a 0-row frame that callers read as "no play-by-play". A genuine 404 still returns empty. Other loaders keep the old behaviour; it is opt-in through the new `load_from_url(abort_on_transient = TRUE)`. `get_players()` (used by `get_match_chains()`) now stops with a plain message when player details come back empty, for example after a timed-out call, instead of failing later on a missing `player_id` column. torp#314; the Grand Final lineup path in that issue is still open.

@@ -172,6 +172,7 @@ EPV3_DUEL_EVIDENCE_OUTS <- c("Contested Mark", "Pack Mark (P)", "Pack Mark (O)",
 #' filter lives in \code{build_aerial_contests()}; this function's job under
 #' \code{"evidence"} is only to let every candidate row through so that filter
 #' can see it.
+#' @rdname epv3_aerial_out_fn
 #' @keywords internal
 epv3_aerial_out <- function(population = EPV3_CONTEST_POPULATION) {
   # switch() on a number selects by index, which would bypass the abort below.

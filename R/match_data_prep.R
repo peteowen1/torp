@@ -365,17 +365,21 @@
 #' @param fix_df Pivoted fixture df from .build_fixtures_df()
 #' @param team_rt_df Team ratings df from .build_team_ratings_df()
 #' @param all_grounds Stadium reference data
+#' @param include_xrapm Carry the team `xrapm` sum through to the model frame
+#'   (so `xrapm_diff` is real rather than 0). Default `FALSE` = production
+#'   today; the switch exists so the xRAPM rolling gate can build its "on" arm
+#'   from the same code (Pete 2026-11-12: turn on only if the gate passes).
 #' @return Fixture df enriched with log_dist, familiarity, days_rest, and team ratings
 #' @keywords internal
 #' @importFrom purrr pmap_dbl
-.build_match_features <- function(fix_df, team_rt_df, all_grounds) {
+.build_match_features <- function(fix_df, team_rt_df, all_grounds, include_xrapm = FALSE) {
   all_grounds <- .add_supplementary_grounds(all_grounds)
-  # xrapm is NOT carried through here (include_xrapm = FALSE), so it never
-  # reaches team_rt_fix_df and `xrapm_diff` is a constant 0 in the model frame.
+  # By default xrapm is NOT carried through here, so it never reaches
+  # team_rt_fix_df and `xrapm_diff` is a constant 0 in the model frame.
   # Measured 2026-10-17 on 2024-2026: max |xrapm_diff| = 0 although the as-of
-  # snapshot loads and .build_team_ratings_df() sums it. Left as it was --
-  # switching it on changes the XGBoost feature set and needs the owner's call.
-  torp_sum_cols <- .torp_sum_cols(names(team_rt_df), include_xrapm = FALSE)
+  # snapshot loads and .build_team_ratings_df() sums it. Switching it on
+  # changes the XGBoost feature set and waits on the rolling gate.
+  torp_sum_cols <- .torp_sum_cols(names(team_rt_df), include_xrapm = include_xrapm)
 
   # Add venue from fixtures (teams data doesn't carry venue)
   team_rt_df <- team_rt_df |>

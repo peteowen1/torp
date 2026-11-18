@@ -1,6 +1,6 @@
 Package: torp
 Title: AFL Analytics and Player Rating System
-Version: 1.11.3
+Version: 1.11.4
 Authors@R: 
     person("Pete", "Owen", , "pete.owen1@hotmail.co.uk", role = c("aut", "cre"))
 Description: Provides tools for Australian Football League (AFL) analytics including 
@@ -47,7 +47,7 @@ Suggests:
     splitTools,
     rmarkdown,
     testthat (>= 3.0.0),
-    torpmodels,
+    torpmodels (>= 0.0.7),
     xgboost (>= 2.0.0),
     zoo (>= 1.8.0)
 Config/testthat/edition: 3

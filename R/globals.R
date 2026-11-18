@@ -533,3 +533,50 @@ utils::globalVariables(c(
   "p_other_hat", "p_att_hat", "p_def_hat", "V_oth_hat", "V_branch_hat",
   ".is_other", ".is_att", ".p_att_given", "shot_at_goal"
 ))
+
+# Columns flagged by R CMD check on 2026-11-18 (207 names across the Net Points
+# ledger, EPV v3 contests/disposals, position centring, team RAPM/SPM and AFLW
+# features). Each use was checked to sit inside a data.table [ ], :=, setorder(),
+# a formula or after $, so none is a dangling plain variable. Generic names
+# (i, j, out, pid, keep, ...) are declared package-wide from here on, so R CMD
+# check stops flagging them anywhere: for a changed function, read
+# codetools::findGlobals(torp:::the_fn, merge = FALSE)$variables instead.
+utils::globalVariables(c(
+  "..out_cols", "..parts", ".corr", ".cpg", ".ctog", ".cw", ".cx", ".def_acts",
+  ".f1_description", ".f2_description", ".f3_description", ".f4_description",
+  ".f5_description", ".f6_description", ".got", ".lc_bucket", ".lc_round",
+  ".lc_w", ".listed_bucket", ".lp_raw", ".lp_val", ".m", ".new", ".olag",
+  ".opp", ".psr_ref", ".rated", ".role_grp", ".target", ".tog_side", "abs_y",
+  "aby", "acting", "acts", "aflw_psr_matched", "any_named", "att_x", "back",
+  "box", "ceded", "chain_aby", "chain_home", "chain_x", "chain_x_home",
+  "channel", "channel_epv", "checkpoint_date", "cont_att", "cont_surprise",
+  "conv", "corr", "credit", "dacts", "dcred", "decay_weight", "Delta",
+  "doubled", "elo_current_away", "elo_current_home", "elo_pre_away",
+  "elo_pre_home", "f1_description", "f2_description", "f3_description",
+  "f4_description", "f5_description", "f6_description", "fwd_gain",
+  "gain_home", "goal_dist", "got_named", "ground_surprise", "hit",
+  "holdout_mse", "home_margin", "home_won", "i", "i..psr_sd", "i.a", "i.b",
+  "i.baseline", "i.chain_home", "i.cont_desc", "i.cont_surprise",
+  "i.contested", "i.corr", "i.decision", "i.def_win", "i.err_desc",
+  "i.err_pid", "i.ground_surprise", "i.last_in_period", "i.n_pair",
+  "i.net_points", "i.next_desc", "i.next_player", "i.next_team", "i.off_away",
+  "i.off_home", "i.p_hat", "i.period", "i.resid_expected", "i.resolve_desc",
+  "i.resolve_lag", "i.resolve_player", "i.resolve_team", "i.s_player",
+  "i.s_pool", "i.s_ruck", "i.surprise", "i.sw_lose", "i.sw_win", "i.t1",
+  "i.t2", "i.winner_pid", "is_home", "j", "keep", "kick_len", "kick_tid",
+  "kick_x", "kick_y", "lam", "last_in_period", "m_career", "m_listed",
+  "m_prior", "m_round", "m_season", "n_a", "n_games", "n_h", "n_kept",
+  "n_rated", "n_rated_away", "n_rated_home", "n_tog", "named", "named_tot",
+  "next_player", "next_round_first", "next_team", "opp_tid", "out", "out_tid",
+  "out_x", "out_y", "own", "p_disp", "p_next", "p_pid", "p_team", "p1", "p2",
+  "pid", "pool", "pool_d", "pool_row", "pos_bucket", "position_bucket", "pw",
+  "px", "rapm", "rapm_col", "rapm_defense", "rapm_offense", "rating_type",
+  "round_last_match", "row_idx", "row_role", "scaled", "short",
+  "shrinkage_weight", "side", "side_sum", "snapshot_date", "spm_defense",
+  "spm_offense", "sw", "sx", "target", "target_pid", "team_match_id",
+  "team_psr_away", "team_psr_home", "team_rapm_shrunk",
+  "team_rapm_shrunk_defense", "team_rapm_shrunk_offense", "team_score",
+  "team_tog", "tog_minutes", "tog_rnk", "total_tog_minutes", "turnover",
+  "V_ret_hat", "V_trn_hat", "Va", "Va_cell", "Va_type", "val", "Vh", "Vh_cell",
+  "Vh_type", "wmean", "xrapm.x", "xrapm.y", "yband"
+))
