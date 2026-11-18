@@ -1419,9 +1419,12 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       # torpmodels is a Suggests, not a hard dependency (DESCRIPTION:48) --
       # stamp provenance + update the manifest when available, but never let
       # its absence break the daily run: fall back to an unstamped upload.
-      has_torpmodels <- requireNamespace("torpmodels", quietly = TRUE)
+      # 0.0.7 is the first torpmodels that exports build_model_meta() and
+      # stamp_model_meta(); an older install would error at the :: calls below.
+      has_torpmodels <- requireNamespace("torpmodels", quietly = TRUE) &&
+        utils::packageVersion("torpmodels") >= "0.0.7"
       if (!has_torpmodels) {
-        cli::cli_warn("torpmodels not available -- uploading match_gams/match_xgb_pipeline without a provenance stamp")
+        cli::cli_warn("torpmodels (>= 0.0.7) not available -- uploading match_gams/match_xgb_pipeline without a provenance stamp")
       }
       match_seasons <- sort(unique(team_mdl_df$season.x))
       match_seasons_range <- if (length(match_seasons) > 0) paste(range(match_seasons), collapse = "-") else NA_character_

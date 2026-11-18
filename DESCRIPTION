@@ -47,7 +47,7 @@ Suggests:
     splitTools,
     rmarkdown,
     testthat (>= 3.0.0),
-    torpmodels,
+    torpmodels (>= 0.0.7),
     xgboost (>= 2.0.0),
     zoo (>= 1.8.0)
 Config/testthat/edition: 3
