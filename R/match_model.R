@@ -1431,12 +1431,12 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       t0 <- proc.time()[["elapsed"]]
       match_gams_out <- .strip_gam_models(gam_result$models)
       if (has_torpmodels) {
-        gam_meta <- torpmodels:::build_model_meta(
+        gam_meta <- torpmodels::build_model_meta(
           "match_gams", match_seasons_range, list(), NA_character_,
           n_matches = nrow(team_mdl_df) / 2,
           extra = list(script = "run_predictions_pipeline")
         )
-        match_gams_out <- torpmodels:::stamp_model_meta(match_gams_out, gam_meta)
+        match_gams_out <- torpmodels::stamp_model_meta(match_gams_out, gam_meta)
       }
       saveRDS(match_gams_out, gam_path)
       t1 <- proc.time()[["elapsed"]]
@@ -1457,12 +1457,12 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
         t3 <- proc.time()[["elapsed"]]
         match_xgb_out <- xgb_result$models
         if (has_torpmodels) {
-          xgb_meta <- torpmodels:::build_model_meta(
+          xgb_meta <- torpmodels::build_model_meta(
             "match_xgb_pipeline", match_seasons_range, list(), NA_character_,
             n_matches = nrow(team_mdl_df) / 2,
             extra = list(script = "run_predictions_pipeline")
           )
-          match_xgb_out <- torpmodels:::stamp_model_meta(match_xgb_out, xgb_meta)
+          match_xgb_out <- torpmodels::stamp_model_meta(match_xgb_out, xgb_meta)
         }
         saveRDS(match_xgb_out, xgb_path)
         t4 <- proc.time()[["elapsed"]]
@@ -1516,12 +1516,12 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
           calib_path <- file.path(tempdir(), "match_margin_calibration.rds")
           calib_out <- calib_fit
           if (has_torpmodels) {
-            calib_meta <- torpmodels:::build_model_meta(
+            calib_meta <- torpmodels::build_model_meta(
               "match_margin_calibration", match_seasons_range, list(), NA_character_,
               n_matches = calib_fit$n_oos,
               extra = list(script = "run_predictions_pipeline", holdout_season = calib_fit$holdout_season)
             )
-            calib_out <- torpmodels:::stamp_model_meta(calib_out, calib_meta)
+            calib_out <- torpmodels::stamp_model_meta(calib_out, calib_meta)
           }
           saveRDS(calib_out, calib_path)
           safe_release_upload(calib_path, repo = "peteowen1/torpmodels", tag = "core-models")
