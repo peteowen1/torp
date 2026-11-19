@@ -48,7 +48,9 @@ CLUBS = {"Ade": "Adelaide", "BL": "Brisbane", "Car": "Carlton", "Col": "Collingw
          "Ess": "Essendon", "Fre": "Fremantle", "Gee": "Geelong", "GC": "Gold Coast",
          "GWS": "Greater Western Sydney", "Haw": "Hawthorn", "Mel": "Melbourne",
          "NM": "North Melbourne", "PA": "Port Adelaide", "Ric": "Richmond", "StK": "St Kilda",
-         "Syd": "Sydney", "WC": "West Coast", "WB": "Western Bulldogs"}
+         "Syd": "Sydney", "WC": "West Coast", "WB": "Western Bulldogs",
+         # spellings editors also use (seen on the 2025 and 2026 draft pages)
+         "Bri": "Brisbane", "STK": "St Kilda", "Stk": "St Kilda"}
 CODE = {"ADEL": "Adelaide", "BL": "Brisbane", "CARL": "Carlton", "COLL": "Collingwood",
         "ESS": "Essendon", "FRE": "Fremantle", "GEEL": "Geelong", "GC": "Gold Coast",
         "GWS": "Greater Western Sydney", "HAW": "Hawthorn", "MELB": "Melbourne",
@@ -83,6 +85,8 @@ def clean_player(cell):
 # A player name is letters (accents allowed), spaces, apostrophes, dots and
 # hyphens, 2-40 characters. Anything else blocks the upload (see check()).
 NAME_OK = re.compile(r"^[A-Za-zÀ-ɏ' .\-]{2,40}$")
+SCOPE_ROW = re.compile(r'scope\s*=\s*"?row', re.I)
+AFL_TPL = re.compile(r"\{\{\s*AFL\s*[ |]\s*(\w+)\s*\}\}")  # {{AFL GC}} and {{AFL|GC}} both occur
 
 
 def fetch_wiki():
@@ -112,15 +116,19 @@ def parse_table(wikitext):
         pick = next((int(m.group(1)) for l in lines if (m := re.fullmatch(r"\|\s*(\d+)\s*", l))), None)
         if pick is None:
             continue
-        player_line = next((l for l in lines if l.startswith("!") and "scope=row" in l), "")
+        # Real tables write scope="row" (quoted); 2025's draft-night revisions do.
+        player_line = next((l for l in lines if l.startswith("!") and SCOPE_ROW.search(l)), "")
         player = clean_player(player_line.split("|", 1)[1]) if "|" in player_line else ""
         club_line = next((l for l in lines if l.startswith("|") and "align" not in l
-                          and re.search(r"\{\{AFL (\w+)\}\}", l)), "")
-        m = re.search(r"\{\{AFL (\w+)\}\}", club_line)
+                          and AFL_TPL.search(l)), "")
+        m = AFL_TPL.search(club_line)
         club = CLUBS.get(m.group(1), f"?{m.group(1)}") if m else ""
         notes_line = next((l for l in lines if "align" in l), "")
+        notes_raw = notes_line.split("|", 1)[1] if "|" in notes_line else ""
+        b = re.search(r"bid\s+by\s+" + AFL_TPL.pattern, notes_raw, re.I)
         rows.append({"pick": pick, "club": club, "player": player,
-                     "notes": clean_player(notes_line.split("|", 1)[1]) if "|" in notes_line else ""})
+                     "notes": clean_player(notes_raw),
+                     "bid_by": CLUBS.get(b.group(1), f"?{b.group(1)}") if b else None})
     return rows
 
 
@@ -157,7 +165,9 @@ def build_picks_made(rows, base):
             if "no bid" in r["notes"].lower():
                 pass
             elif r["club"] in clubs:
-                nxt = rows[i + 1]["club"] if i + 1 < len(rows) else None
+                # The notes usually name the bidder ("matched bid by {{AFL WC}}");
+                # otherwise read it as the next pick's holder.
+                nxt = r.get("bid_by") or (rows[i + 1]["club"] if i + 1 < len(rows) else None)
                 rec.update(bid=True, matched=True, bidding_club=nxt,
                            points_paid=cost.get((name, r["club"], r["pick"])))
             else:
@@ -261,7 +271,11 @@ def main():
     ap.add_argument("--until", default=None, help="ISO time with offset, e.g. 2026-11-19T23:30+11:00")
     args = ap.parse_args()
     (LIVE / "wiki").mkdir(parents=True, exist_ok=True)
-    until = dt.datetime.fromisoformat(args.until) if args.until else None
+    if os.name == "nt":  # stop Windows sleeping or hibernating while this runs (AC hibernate is 3 h idle)
+        import ctypes
+        ok = ctypes.windll.kernel32.SetThreadExecutionState(0x80000000 | 0x00000001)  # CONTINUOUS | SYSTEM_REQUIRED
+        log(f"keep-awake {'on' if ok else 'FAILED'}")
+    until =dt.datetime.fromisoformat(args.until) if args.until else None
     log(f"start: once={args.once} dry_run={args.dry_run} interval={args.interval}s from={args.start} until={args.until}")
     if args.start:
         wait = (dt.datetime.fromisoformat(args.start) - dt.datetime.now(dt.timezone.utc)).total_seconds()
