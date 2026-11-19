@@ -26,6 +26,7 @@
 suppressMessages({ library(data.table) })
 source("data-raw/08-trade-value/trade_tables.R")
 source("data-raw/08-trade-value/draft_names.R")
+source("data-raw/08-trade-value/trade_constants.R")
 suppressMessages(devtools::load_all("C:/dev/torpverse/torp", quiet = TRUE))
 raw_dir <- "C:/dev/torpverse/torpdata/data/raw/trades_past"
 out_dir <- "C:/dev/torpverse/torpdata/data/raw/trade_value"
@@ -99,8 +100,11 @@ grade_year <- function(y) {
   a[type != "player", band := pick_band(fifelse(type == "pick_draft", pick, exp_pick))]
   a[fac, on = "band", value_club := fifelse(type != "player", value * i.club_factor, value_club)]
 
-  g_in  <- a[, .(v_in = sum(value, na.rm = TRUE), v_in_club = sum(value_club, na.rm = TRUE)), by = .(trade, club = to_club)]
-  g_out <- a[, .(v_out = sum(value, na.rm = TRUE), v_out_club = sum(value_club, na.rm = TRUE)), by = .(trade, club = from_club)]
+  # Players count at PLAYER_VALUE_FACTOR in the grade; the asset file keeps
+  # their full value (12 reads it and applies the factor itself).
+  pw <- fifelse(a$type == "player", PLAYER_VALUE_FACTOR, 1)
+  g_in  <- a[, .(v_in = sum(value * pw[.I], na.rm = TRUE), v_in_club = sum(value_club * pw[.I], na.rm = TRUE)), by = .(trade, club = to_club)]
+  g_out <- a[, .(v_out = sum(value * pw[.I], na.rm = TRUE), v_out_club = sum(value_club * pw[.I], na.rm = TRUE)), by = .(trade, club = from_club)]
   gr <- merge(g_in, g_out, by = c("trade", "club"), all = TRUE)
   for (cc in c("v_in", "v_in_club", "v_out", "v_out_club")) set(gr, which(is.na(gr[[cc]])), cc, 0)
   gr[, `:=`(net = v_in - v_out, net_club = v_in_club - v_out_club)]

@@ -29,6 +29,7 @@
 suppressMessages({ library(data.table) })
 source("data-raw/08-trade-value/trade_tables.R")
 source("data-raw/08-trade-value/draft_names.R")
+source("data-raw/08-trade-value/trade_constants.R")
 suppressMessages(devtools::load_all("C:/dev/torpverse/torp", quiet = TRUE))
 raw_dir <- "C:/dev/torpverse/torpdata/data/raw/trades_past"
 out_dir <- "C:/dev/torpverse/torpdata/data/raw/trade_value"
@@ -193,8 +194,11 @@ grade_year <- function(y) {
   a[, v_turned := realised + after]
   stopifnot(!anyNA(a$v_turned))
 
-  g_in  <- a[, .(v_in = sum(v_turned), at_in = sum(value, na.rm = TRUE)), by = .(trade, club = to_club)]
-  g_out <- a[, .(v_out = sum(v_turned), at_out = sum(value, na.rm = TRUE)), by = .(trade, club = from_club)]
+  # Traded players count at PLAYER_VALUE_FACTOR; draftees (pick rows) in full.
+  # The asset file keeps full values; 13 scales the player rows it shows.
+  a[, pw := fifelse(type == "player", PLAYER_VALUE_FACTOR, 1)]
+  g_in  <- a[, .(v_in = sum(v_turned * pw), at_in = sum(value * pw, na.rm = TRUE)), by = .(trade, club = to_club)]
+  g_out <- a[, .(v_out = sum(v_turned * pw), at_out = sum(value * pw, na.rm = TRUE)), by = .(trade, club = from_club)]
   gr <- merge(g_in, g_out, by = c("trade", "club"), all = TRUE)
   for (cc in c("v_in", "v_out", "at_in", "at_out")) set(gr, which(is.na(gr[[cc]])), cc, 0)
   gr[, `:=`(net_turned = v_in - v_out, net_then = at_in - at_out)]
