@@ -107,9 +107,24 @@ def parse_table(wikitext):
     start = wikitext.find("== 2026 national draft ==")
     if start < 0:
         raise ValueError("no '2026 national draft' section")
-    body = wikitext[start:]
-    end = body.find("\n|}")
-    body = body[:end if end > 0 else len(body)]
+    sec = wikitext[start:]
+    nxt = re.search(r"\n==[^=]", sec[5:])
+    sec = sec[:nxt.start() + 5] if nxt else sec
+    # The section can hold more than one table: on 20 Nov editors put an empty
+    # "Draft order prior to the draft" table (in {{hidden begin}}) above the
+    # real selections table. Parse every table; use the one with the most
+    # players named (ties: the last, which is the selections table).
+    tables = [t for t in re.split(r"\n\{\|", sec)[1:]]
+    best = []
+    for t in tables:
+        end = t.find("\n|}")
+        rows = _parse_rows(t[:end if end > 0 else len(t)])
+        if rows and sum(1 for r in rows if r["player"]) >= sum(1 for r in best if r["player"]):
+            best = rows
+    return best
+
+
+def _parse_rows(body):
     rows = []
     for block in body.split("\n|-")[1:]:
         lines = [l.strip() for l in block.split("\n") if l.strip()]
@@ -242,6 +257,14 @@ def cycle(args):
     problems = check(made, last_n)
     out = dict(base)
     out["picks_made"] = made
+    # Who's on the clock, from Wikipedia's rows with a club but no player yet
+    # (editors fill the live order in ahead of the picks). Live numbering, like
+    # picks_made; empty when the table has no unfilled rows.
+    last = made[-1]["pick"] if made else 0
+    upcoming = [{"pick": r["pick"], "club": r["club"]} for r in rows
+                if not r["player"] and r["pick"] > last and r["club"] in CLUBS.values()]
+    out["on_clock"] = upcoming[0] if upcoming else None
+    out["to_come"] = upcoming[:10]
     out["updated_at"] = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     out["live_source"] = dict(src, override_rows=len(load_override()), method=(
         "Picks read from Wikipedia's draft table each minute; hand-entered picks override it. "
@@ -281,7 +304,12 @@ def main():
         wait = (dt.datetime.fromisoformat(args.start) - dt.datetime.now(dt.timezone.utc)).total_seconds()
         if wait > 0:
             log(f"waiting {wait / 60:.0f} min for {args.start}")
-            time.sleep(wait)
+            # Re-check the wall clock every minute: one long time.sleep() does not
+            # count time the PC spends asleep, so night one's run (19 Nov) woke a
+            # day late and missed the whole night.
+            start_at = dt.datetime.fromisoformat(args.start)
+            while dt.datetime.now(dt.timezone.utc) < start_at:
+                time.sleep(min(60, max(1, (start_at - dt.datetime.now(dt.timezone.utc)).total_seconds())))
     while True:
         t0 = time.time()
         try:
