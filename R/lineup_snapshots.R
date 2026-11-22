@@ -78,7 +78,7 @@
 
 #' Fetch one snapshot of the team lists for nearby matches
 #'
-#' Fetches the roster of every match from [.select_snapshot_matches()] and
+#' Fetches the roster of every match whose bounce is within the snapshot window and
 #' returns what came back. Does not upload anything; see
 #' [save_lineup_snapshots()].
 #'

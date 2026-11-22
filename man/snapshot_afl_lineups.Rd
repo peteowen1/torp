@@ -21,7 +21,7 @@ A list with \code{log} (one row per match fetched: \code{match_id},
 All three have zero rows when no match is in the window.
 }
 \description{
-Fetches the roster of every match from \code{\link[=.select_snapshot_matches]{.select_snapshot_matches()}} and
+Fetches the roster of every match whose bounce is within the snapshot window and
 returns what came back. Does not upload anything; see
 \code{\link[=save_lineup_snapshots]{save_lineup_snapshots()}}.
 }
