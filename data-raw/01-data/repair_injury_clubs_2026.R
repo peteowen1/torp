@@ -13,8 +13,8 @@
 #     lists from get_afl_player_details(2026));
 #   - relabels `team` only when the name maps to exactly ONE club (full name
 #     first, then first initial + surname for nicknames); a name that maps to
-#     two clubs (there are two Max Kings and two Will Edwards) or none is
-#     left as scraped and reported;
+#     two clubs (two Max Kings; Lachie Smith matches Lachlan and Logan Smith)
+#     or none is left as scraped and reported;
 #   - adds `team_check`: "relabelled", "unverified" (in the bad window but
 #     not resolvable, so its club may be wrong) or "as scraped" (every other
 #     row in the file). Rows written by later scrapes read NA: the fixed
