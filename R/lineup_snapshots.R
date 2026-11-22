@@ -13,6 +13,9 @@
 #   teams_snapshots_raw_<season> the raw response text for each changed version
 # The list in force at time T for a match is its latest version with
 # fetched_at <= T; the log shows the fetches between versions found no change.
+# If a run's uploads fail part-way, the next run re-saves the same version
+# with a later fetched_at, so one roster_hash can appear twice: count versions
+# as distinct (match_id, roster_hash) and take min(fetched_at) as first seen.
 
 
 #' Pick the matches a snapshot run should fetch
