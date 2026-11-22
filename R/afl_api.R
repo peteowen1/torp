@@ -24,10 +24,15 @@
 #' @param token Character. CFS API auth token.
 #' @param parse_fn Function taking `(parsed_json, id)` and returning a data.frame.
 #' @param label Character. Label for progress messages (e.g. "roster", "stats").
+#' @param raw_env Optional environment. When given, every response is stored
+#'   in it as `raw_env[[id]] <- list(status, body)` BEFORE parsing, exactly as
+#'   received (`body` is the response text; a transport failure stores status
+#'   `NA` and body `NA`). Used to keep raw copies of what the API returned.
 #' @return A tibble of all parsed results row-bound together.
 #' @keywords internal
 #' @importFrom curl new_pool new_handle curl_fetch_multi multi_run
-.fetch_cfs_batch <- function(ids, url_template, token, parse_fn, label = "data") {
+.fetch_cfs_batch <- function(ids, url_template, token, parse_fn, label = "data",
+                             raw_env = NULL) {
   if (length(ids) == 0) return(tibble::tibble())
 
   cli::cli_inform("Fetching {label} for {length(ids)} match{?es} in parallel...")
@@ -48,6 +53,10 @@
       idx <- i
       mid <- ids[i]
       curl::curl_fetch_multi(url, done = function(resp) {
+        if (!is.null(raw_env)) {
+          raw_env[[mid]] <- list(status = resp$status_code,
+                                 body = rawToChar(resp$content))
+        }
         if (resp$status_code == 200L) {
           tryCatch({
             json <- jsonlite::fromJSON(rawToChar(resp$content), flatten = TRUE)
@@ -60,6 +69,9 @@
           n_failed <<- n_failed + 1L
         }
       }, fail = function(msg) {
+        if (!is.null(raw_env)) {
+          raw_env[[mid]] <- list(status = NA_integer_, body = NA_character_)
+        }
         n_failed <<- n_failed + 1L
       }, handle = h, pool = pool)
     })
@@ -849,16 +861,25 @@ get_afl_lineups <- function(season = NULL, round = NULL, comp = "AFLM") {
   n_with_lineups <- length(unique(result$providerId))
   cli::cli_inform("Loaded lineups for {n_with_lineups} of {n_total} match{?es}.")
 
-  # Add season and row_id to match existing schema
+  .finish_lineups(result)
+}
+
+
+#' Add season and row_id to parsed roster rows and normalise their columns
+#'
+#' Shared by [get_afl_lineups()] and [snapshot_afl_lineups()] so the two
+#' produce the same columns.
+#' @param result Row-bound output of [.parse_match_roster()].
+#' @return The normalised tibble (`providerId` becomes `match_id`, etc.).
+#' @keywords internal
+#' @noRd
+.finish_lineups <- function(result) {
   result$season <- .season_from_provider_id(result$providerId)
   if ("player.playerId" %in% names(result)) {
     result$row_id <- paste0(result$providerId, result$teamId, result$player.playerId)
   }
-
-  # Normalise column names (providerId → match_id, teamId → team_id, etc.)
-  result <- .normalise_teams_columns(result)
-
-  result
+  # Normalise column names (providerId -> match_id, teamId -> team_id, etc.)
+  .normalise_teams_columns(result)
 }
 
 
