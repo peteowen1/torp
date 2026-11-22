@@ -327,3 +327,20 @@ RELEASE_GAP_RETRY_HOURS <- 48
 #' @rdname RELEASE_REPAIR_WINDOW_HOURS
 #' @noRd
 RELEASE_MATCH_DURATION_HOURS <- 3
+
+#' Team-list snapshot window and release tag (R/lineup_snapshots.R)
+#'
+#' Each scheduled snapshot run fetches every match whose bounce is between
+#' `LINEUP_SNAPSHOT_LOOKBACK_HOURS` ago and `LINEUP_SNAPSHOT_LOOKAHEAD_DAYS`
+#' ahead. The lookahead reaches the next round from Wednesday evening, when
+#' lists are first named; the lookback gives every match at least one fetch
+#' after it has finished, so its final list carries a fetch time too.
+#' @keywords internal
+#' @noRd
+LINEUP_SNAPSHOT_LOOKBACK_HOURS <- 6
+#' @rdname LINEUP_SNAPSHOT_LOOKBACK_HOURS
+#' @noRd
+LINEUP_SNAPSHOT_LOOKAHEAD_DAYS <- 8
+#' @rdname LINEUP_SNAPSHOT_LOOKBACK_HOURS
+#' @noRd
+LINEUP_SNAPSHOT_TAG <- "teams-snapshots"

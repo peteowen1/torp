@@ -4,7 +4,14 @@
 \alias{.fetch_cfs_batch}
 \title{Batch-fetch JSON from CFS API endpoints}
 \usage{
-.fetch_cfs_batch(ids, url_template, token, parse_fn, label = "data")
+.fetch_cfs_batch(
+  ids,
+  url_template,
+  token,
+  parse_fn,
+  label = "data",
+  raw_env = NULL
+)
 }
 \arguments{
 \item{ids}{Character vector of endpoint suffixes (e.g. match IDs).}
@@ -16,6 +23,11 @@
 \item{parse_fn}{Function taking \verb{(parsed_json, id)} and returning a data.frame.}
 
 \item{label}{Character. Label for progress messages (e.g. "roster", "stats").}
+
+\item{raw_env}{Optional environment. When given, every response is stored
+in it as \code{raw_env[[id]] <- list(status, body)} BEFORE parsing, exactly as
+received (\code{body} is the response text; a transport failure stores status
+\code{NA} and body \code{NA}). Used to keep raw copies of what the API returned.}
 }
 \value{
 A tibble of all parsed results row-bound together.
