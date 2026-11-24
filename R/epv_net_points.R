@@ -1406,12 +1406,16 @@
 #' @param by_act Route the ball-winner's share by HOW he won it
 #'   (`NP_BALL_WINNER_SHARE_BY_ACT`, keyed on the next row's description)
 #'   instead of the flat `psi`. On under difficulty credit (D11).
+#' @param zone_keys Output of `.np_zone_keys()`, only under
+#'   `NP_POOL_SPREAD = "zone"`: each pool row is then keyed (`zone_key`) by the
+#'   named contest defender, the contest target's zone or the disposer's zone.
+#'   `NULL` (production) leaves the pool exactly as before.
 #' @return A list of `debits` (per disposer, negative of what they ceded),
 #'   `won` (paid directly to identified ball-winners), `contest_won` (paid to
 #'   the named winner of a contest the defence won) and `pool` (the remainder,
 #'   per `match_id`, `def_team`, `winner_slot`).
 #' @keywords internal
-.np_defensive_pool <- function(l, lineup, psi = 0, by_act = FALSE) {
+.np_defensive_pool <- function(l, lineup, psi = 0, by_act = FALSE, zone_keys = NULL) {
   if (!is.numeric(psi) || length(psi) != 1 || is.na(psi) || psi < 0 || psi > 1) {
     cli::cli_abort("{.arg ball_winner_share} must be one number in [0, 1], not {.val {psi}}.")
   }
@@ -1500,8 +1504,17 @@
   to[, spread_hm := spread_hm + cede_c_hm * (1 - rho)]
   # keyed by the disposer too, so a context spread can use who was observed
   # contesting HIM
-  pool <- to[, .(pool_hm = sum(spread_hm)),
-             by = .(match_id, def_team = opp_team, winner_slot, loser_pid = player_id)]
+  pool_by <- c("match_id", "opp_team", "winner_slot", "player_id")
+  if (!is.null(zone_keys)) {
+    .np_assign_zone_key(to, lineup, zone_keys)
+    pool_by <- c(pool_by, "zone_key")
+    kt <- to[, .(pts = sum(abs(spread_hm)), n = .N),
+             by = .(k = data.table::fifelse(is.na(zone_key), "none", substr(zone_key, 1L, 1L)))]
+    cli::cli_alert_info(
+      "Zone spread keys: {paste0(kt$k, ' ', format(kt$n, big.mark = ','), ' rows / ', round(kt$pts, 1), ' pts', collapse = '; ')} (P = named defender, T = target zone, D = disposer zone)")
+  }
+  pool <- to[, .(pool_hm = sum(spread_hm)), by = pool_by]
+  data.table::setnames(pool, c("opp_team", "player_id"), c("def_team", "loser_pid"))
   if (anyNA(pool$def_team)) {
     lost <- pool[is.na(def_team), sum(abs(pool_hm))]
     cli::cli_abort("{round(lost, 2)} points of ceded value have no opposing team to receive them.")
@@ -1698,12 +1711,20 @@
 #'   chains contest targets, defensive acts, mirror and TOG, weighted by
 #'   `NP_CONTEXT_WEIGHTS`; needs `chains` or `contest_pairs` for the pairings).
 #' @param mirror_share Share the mirror slot takes under "matchup".
+#' @param zone_mix Output of `.np_fit_zone_mix()`, for `spread = "zone"` (the
+#'   positional mirror arm, `NP_POOL_SPREAD`): a pool keyed `P:` goes to the
+#'   named defender, `T:`/`D:` across zones by the mix then by TOG, unkeyed by TOG.
 #' @return A data.table of `match_id`, `team`, `player_id`, `np_defensive`.
 #' @keywords internal
-.np_spread_pool <- function(pool, lineup, spread, mirror_share, pairs = NULL) {
+.np_spread_pool <- function(pool, lineup, spread, mirror_share, pairs = NULL,
+                            zone_mix = NULL) {
   if (is.null(pool) || nrow(pool) == 0) return(NULL)
   if (!"loser_pid" %in% names(pool)) pool[, loser_pid := NA_character_]
   grp <- c("match_id", "def_team", "winner_slot", "loser_pid")
+  if (identical(spread, "zone")) {
+    if (!"zone_key" %in% names(pool)) pool[, zone_key := NA_character_]
+    grp <- c(grp, "zone_key")
+  }
 
   a <- merge(pool, lineup, by.x = c("match_id", "def_team"),
              by.y = c("match_id", "team"), allow.cartesian = TRUE)
@@ -1719,6 +1740,7 @@
     defensive_acts = def_acts,
     matchup = 0,  # filled below
     context = 0,  # filled below
+    zone = 0,     # filled below
     cli::cli_abort("Unknown {.arg spread}: {.val {spread}}")
   )]
 
@@ -1772,6 +1794,8 @@
     cli::cli_alert_info(
       "Context spread: {format(n_paired, big.mark = ',')} of {format(data.table::uniqueN(a[, .SD, .SDcols = grp]), big.mark = ',')} pools carry pairing evidence")
   }
+
+  if (identical(spread, "zone")) .np_zone_weights(a, grp, zone_mix)
 
   a[!is.finite(w) | w < 0, w := 0]
   a[, wsum := sum(w), by = grp]
@@ -1981,7 +2005,12 @@
 #' @param spread How the defensive pool is divided: `"matchup"` (the positional
 #'   mirror takes `mirror_share`, rest by TOG), `"defensive_acts"` (by box-score
 #'   defensive work) or `"tog"` (flat by time on ground).
+#'   `"zone"` is the positional mirror arm (`NP_POOL_SPREAD`): a named contest
+#'   defender takes the turnover pool's remainder, otherwise it splits across the
+#'   winning side's zones by `zone_mix`, then by time on ground.
 #' @param mirror_share Share the mirror slot takes when `spread = "matchup"`.
+#' @param zone_mix Fitted `.np_fit_zone_mix()` table for `spread = "zone"`,
+#'   normally from the previous season; `NULL` fits it in-sample and warns.
 #' @param level `"sum"` (default) pins the match total to the margin, which is
 #'   the Oliver identity and all that is required. `"half_margin"` additionally
 #'   forces each team's total to `margin/2` -- cosmetic, and it costs a residual
@@ -2035,7 +2064,7 @@ build_net_points <- function(pbp_data = NULL,
                              defensive_share = NP_DEFENSIVE_SHARE,
                              receiver_share = NP_RECEIVER_SHARE,
                              ball_winner_share = NP_BALL_WINNER_SHARE,
-                             spread = c("matchup", "defensive_acts", "tog", "context"),
+                             spread = c("matchup", "defensive_acts", "tog", "context", "zone"),
                              mirror_share = NP_MIRROR_SHARE,
                              level = c("sum", "half_margin"),
                              reconcile = TRUE,
@@ -2049,7 +2078,8 @@ build_net_points <- function(pbp_data = NULL,
                              stoppage_baseline = NULL,
                              stoppage_loser_share = NP_STOPPAGE_LOSER_SHARE,
                              difficulty_models = NULL,
-                             return_fit = FALSE) {
+                             return_fit = FALSE,
+                             zone_mix = NULL) {
   stoppages <- match.arg(stoppages)
   spread <- match.arg(spread)
   level <- match.arg(level)
@@ -2110,7 +2140,7 @@ build_net_points <- function(pbp_data = NULL,
   cov_def <- mean(!is.na(lineup$def_acts) & lineup$def_acts > 0)
   cli::cli_alert_info(
     "Lineup coverage: position {round(100 * cov_pos, 1)}%, TOG {round(100 * cov_tog, 1)}%, defensive acts {round(100 * cov_def, 1)}% over {format(nrow(lineup), big.mark = ',')} player-matches")
-  if (identical(spread, "matchup") && cov_pos < 0.5) {
+  if (spread %in% c("matchup", "zone") && cov_pos < 0.5) {
     cli::cli_abort(c(
       "Only {round(100 * cov_pos, 1)}% of players have a lineup position.",
       "x" = "{.arg spread = \"matchup\"} would degrade to a flat spread without saying so."
@@ -2187,12 +2217,22 @@ build_net_points <- function(pbp_data = NULL,
   # policed. What the episode was really about is that a GATE ARM varying it
   # under difficulty credit tests nothing -- vary NP_BALL_WINNER_SHARE_BY_ACT.
   .by_act <- identical(credit, "difficulty")
-  dp <- .np_defensive_pool(l, lineup, ball_winner_share, by_act = .by_act)
+  zone_keys <- NULL
+  if (identical(spread, "zone")) {
+    zone_keys <- .np_zone_keys(pbp_data, chains)
+    if (is.null(zone_mix)) {
+      cli::cli_warn("Zone mix fitted IN-SAMPLE on the matches being scored: fine for measurement, not for a published rating.")
+      zone_mix <- .np_fit_zone_mix(pbp_data, chains, player_stats)
+    }
+  }
+  dp <- .np_defensive_pool(l, lineup, ball_winner_share, by_act = .by_act,
+                           zone_keys = zone_keys)
   sc <- .np_stoppage_credit(l, lineup, stoppage_loser_share)
   pool_all <- data.table::rbindlist(list(dp$pool, sc$pool), use.names = TRUE, fill = TRUE)
   if (!is.null(pool_all) && nrow(pool_all) == 0) pool_all <- NULL
-  alloc <- .np_spread_pool(pool_all, lineup, spread, mirror_share, pairs)
-  team_alloc <- .np_spread_pool(.np_offence_pool(l), lineup, spread, mirror_share, pairs)
+  alloc <- .np_spread_pool(pool_all, lineup, spread, mirror_share, pairs, zone_mix = zone_mix)
+  team_alloc <- .np_spread_pool(.np_offence_pool(l), lineup, spread, mirror_share, pairs,
+                                zone_mix = zone_mix)
   if (!is.null(team_alloc)) data.table::setnames(team_alloc, "np_defensive", "np_team")
 
   # dp$debits needs the same NULL check as alloc and dp$won -- all three come
@@ -2529,8 +2569,17 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
 .np_engine_frame <- function(pbp_data, player_stats, chains, difficulty_terms = NULL,
                              results = NULL, np_fit = NULL, return_fit = FALSE) {
   res <- .np_match_results(pbp_data, results)
+  # The pool spread (NP_POOL_SPREAD). Production is "matchup"; "zone" is the
+  # positional mirror gate arm, whose zone mix is fitted on the previous season.
+  spread <- NP_POOL_SPREAD
+  zone_mix <- NULL
+  if (identical(spread, "zone")) {
+    zone_mix <- np_fit$zone_mix
+    if (is.null(zone_mix)) zone_mix <- .np_zone_mix_prior_season(pbp_data, chains, player_stats)
+  }
   np <- build_net_points(pbp_data, player_stats, res, chains = chains,
                          credit = "difficulty", stoppages = "allocate",
+                         spread = spread, zone_mix = zone_mix,
                          difficulty_terms = difficulty_terms,
                          leak_safe = is.null(difficulty_terms),
                          return_payments = isTRUE(NP_TEAM_MARGIN_CONVENTION),
@@ -2540,6 +2589,7 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
                                 contest = np_fit$contest_models),
                          return_fit = return_fit)
   fit <- attr(np, "np_fit")
+  if (!is.null(zone_mix) && !is.null(fit)) fit$zone_mix <- zone_mix
   if (isTRUE(NP_TEAM_MARGIN_CONVENTION)) {
     np <- .np_team_margin(np, pbp_data, player_stats, res)
   }

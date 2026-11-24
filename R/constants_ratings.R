@@ -1825,6 +1825,47 @@ NP_RECEIVER_SHARE <- 0.30
 #' @keywords internal
 NP_MIRROR_SHARE <- 0.50
 
+#' How production spreads the turnover pool: "matchup" (today) or "zone" (gate arm)
+#'
+#' `"matchup"` gives `NP_MIRROR_SHARE` of each turnover pool to the slot mirror of
+#' the player who lost the ball, the rest by time on ground. `"zone"` is the
+#' positional mirror arm (Pete 2026-11-24, widened 2026-11-25): a named contest
+#' defender takes the whole remainder; otherwise the pool splits across the
+#' winning side's zones (`NP_ZONE_OF_SLOT`) in the proportions seen the previous
+#' season -- by the contest target's zone when a kick had a target, else by the
+#' disposer's zone and who won the ball back -- then by time on ground within a
+#' zone. Plan: docs/plans/POSITIONAL-MIRROR-ARM.md. A gate arm, inert at
+#' "matchup"; wire it into `.rating_defining_constants()` if it ever ships.
+#' @keywords internal
+NP_POOL_SPREAD <- "matchup"
+
+#' Lineup slot to defending zone, for `NP_POOL_SPREAD = "zone"`
+#'
+#' Side-free (left and right are arbitrary in `lineup_position`,
+#' docs/reference/POSITIONS.md). Interchange, sub and emergency are one `bench`
+#' zone so rotating players are paid by what bench players are seen to do.
+#' @keywords internal
+NP_ZONE_OF_SLOT <- c(
+  FF = "key_fwd", CHF = "key_fwd",
+  FPL = "fwd_pocket", FPR = "fwd_pocket",
+  HFFL = "half_fwd", HFFR = "half_fwd",
+  C = "mid", R = "mid", RR = "mid",
+  RK = "ruck",
+  WL = "wing", WR = "wing",
+  FB = "key_back", CHB = "key_back",
+  BPL = "back_pocket", BPR = "back_pocket",
+  HBFL = "half_back", HBFR = "half_back",
+  INT = "bench", SUB = "bench", EMERG = "bench"
+)
+
+#' Pseudo-count shrinking each zone mix toward the all-zones mix
+#'
+#' A source zone with n observed events gets weight n / (n + 50) on its own mix
+#' and the rest on the overall mix for that key type, so a thin cell (a ruck
+#' target seen 30 times) cannot swing a whole pool (Pete 2026-11-24, ~50 contests).
+#' @keywords internal
+NP_ZONE_SHRINK_N <- 50
+
 #' Positional mirror: who marks whom
 #'
 #' The geometric matchup. Left/right flip because the two teams attack in
