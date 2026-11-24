@@ -2579,7 +2579,6 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
   }
   np <- build_net_points(pbp_data, player_stats, res, chains = chains,
                          credit = "difficulty", stoppages = "allocate",
-                         spread = spread, zone_mix = zone_mix,
                          difficulty_terms = difficulty_terms,
                          leak_safe = is.null(difficulty_terms),
                          return_payments = isTRUE(NP_TEAM_MARGIN_CONVENTION),
@@ -2591,7 +2590,9 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
   fit <- attr(np, "np_fit")
   if (!is.null(zone_mix) && !is.null(fit)) fit$zone_mix <- zone_mix
   if (isTRUE(NP_TEAM_MARGIN_CONVENTION)) {
-    np <- .np_team_margin(np, pbp_data, player_stats, res)
+    np <- .np_team_margin(np, pbp_data, player_stats, res,
+                          zone_keys = if (!is.null(zone_mix)) .np_zone_keys(pbp_data, chains),
+                          zone_mix = zone_mix)
   }
   if (isTRUE(return_fit)) data.table::setattr(np, "np_fit", fit)
   np
@@ -2690,7 +2691,9 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
 #' @keywords internal
 .np_team_margin <- function(np, pbp_data, player_stats, res,
                             book_conceding = NP_BOOK_CONCEDING_SIDE,
-                            dacts_share = NP_POOL_DACTS_SHARE) {
+                            dacts_share = NP_POOL_DACTS_SHARE,
+                            zone_keys = NULL, zone_mix = NULL,
+                            zone_share = NP_POOL_ZONE_SHARE) {
   pay <- attr(np, "np_payments")
   if (is.null(pay) || nrow(pay) == 0) {
     cli::cli_abort(c(
@@ -2861,6 +2864,19 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
                                 player_id = as.character(player_id), team)]),
               by = c("match_id", "player_id"))
   lu[, w := if (identical(NP_TEAM_MARGIN_POOL_BY, "tog")) tog else pmax(dacts, 0.5)]
+  # The positional mirror gate arm (NP_POOL_SPREAD = "zone"): `zone_share` of
+  # the defending side's credit follows the zone rule instead of time on ground.
+  # NULL zone_mix (production) leaves every line below exactly as it was.
+  zc <- NULL
+  if (!is.null(zone_mix)) {
+    if (!is.numeric(zone_share) || zone_share < 0 || dacts_share + zone_share > 1 + 1e-12) {
+      cli::cli_abort("{.arg zone_share} ({zone_share}) plus {.arg dacts_share} ({dacts_share}) must lie in [0, 1].")
+    }
+    lz <- data.table::copy(lu)
+    lz[ps[, .(match_id = as.character(match_id), player_id = as.character(player_id), position)],
+       on = .(match_id, player_id), position := i.position]
+    zc <- .np_tm_zone_credit(prow, p, lz, zone_keys, zone_mix)
+  }
 
   ros <- merge(lu, pool, by = c("match_id", "team"), all.x = TRUE)
   ros[is.na(pool), pool := 0][is.na(pool_d), pool_d := 0]
@@ -2876,11 +2892,25 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
     cli::cli_alert_warning(
       "{nrow(nd)} team-match{?es} with defensive pool credit have no defensive acts recorded; that credit is shared by time on ground.")
   }
-  ros[, share := {
-    ww <- w / sum(w)
-    wd <- if (sum(dacts) > 0) dacts / sum(dacts) else ww
-    (pool - pool_d) * ww + pool_d * ((1 - k) * ww + k * wd)
-  }, by = .(match_id, team)]
+  if (is.null(zc)) {
+    ros[, share := {
+      ww <- w / sum(w)
+      wd <- if (sum(dacts) > 0) dacts / sum(dacts) else ww
+      (pool - pool_d) * ww + pool_d * ((1 - k) * ww + k * wd)
+    }, by = .(match_id, team)]
+  } else {
+    z <- zone_share
+    ros[, zalloc := 0][, pool_du := 0]
+    if (!is.null(zc$keyed)) ros[zc$keyed, on = .(match_id, team, player_id), zalloc := i.zalloc]
+    ros[zc$unkeyed, on = .(match_id, team), pool_du := i.pool_du]
+    ros[, share := {
+      ww <- w / sum(w)
+      wd <- if (sum(dacts) > 0) dacts / sum(dacts) else ww
+      (pool - pool_d) * ww + pool_d * ((1 - k - z) * ww + k * wd) +
+        z * (zalloc + pool_du * ww)
+    }, by = .(match_id, team)]
+    ros[, c("zalloc", "pool_du") := NULL]
+  }
   out <- merge(ros[, .(match_id, team, player_id, tog, share)], namd,
                by = c("match_id", "team", "player_id"), all = TRUE)
   out[is.na(named), named := 0][is.na(share), share := 0][, val := named + share]

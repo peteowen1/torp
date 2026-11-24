@@ -138,7 +138,7 @@ KNOWN_NON_DEFINING <- c(
   # build_net_points()'s default always was, and NP_ZONE_OF_SLOT /
   # NP_ZONE_SHRINK_N are read only under "zone". Inert at the default; if the
   # arm ships, all three move into .rating_defining_constants() with the vintage.
-  "NP_POOL_SPREAD", "NP_ZONE_OF_SLOT", "NP_ZONE_SHRINK_N",
+  "NP_POOL_SPREAD", "NP_ZONE_OF_SLOT", "NP_ZONE_SHRINK_N", "NP_POOL_ZONE_SHARE",
   # -- MEASURED INERT, 2026-09-10, and the reason it can be trusted as inert
   # rather than merely small. .np_team_margin() rescales each SIDE of every row
   # up to that row's FULL value (own * target / side_sum), so any constant whose

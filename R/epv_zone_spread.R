@@ -225,3 +225,74 @@
   .np_fit_zone_mix(load_pbp(prev, rounds = TRUE), load_chains(prev, rounds = TRUE),
                    load_player_stats(prev))
 }
+
+#' Zone-rule share of the defending side's unnamed credit, team-margin layer
+#'
+#' The layer where the published value is decided: under
+#' `NP_TEAM_MARGIN_CONVENTION` every pool is re-spread per team-match in
+#' `.np_team_margin()`, so `.np_spread_pool()`'s choice never reaches
+#' `net_points` (measured 2026-11-25, docs/plans/POSITIONAL-MIRROR-ARM.md).
+#' Each defensive-credit row (`dcred`: positive pool value on the side without
+#' the ball) is keyed like a turnover-pool row -- `P:` the named contest
+#' defender, `T:` the contest target's zone, `D:` the zone of the player who had
+#' the ball on that row -- and the keyed value is spread by `.np_zone_weights()`.
+#'
+#' @param prow Row-side pool table inside `.np_team_margin()` (`match_id`,
+#'   `display_order`, `team`, `pool_row`, `dcred`).
+#' @param p Play-by-play (`match_id`, `display_order`, `player_id`).
+#' @param lu Lineup with `match_id`, `team`, `player_id`, `tog`, `position`.
+#' @param zone_keys Output of `.np_zone_keys()`.
+#' @param zone_mix Output of `.np_fit_zone_mix()`.
+#' @return A list: `keyed` (`match_id`, `team`, `player_id`, `zalloc`: that
+#'   player's share of the keyed credit, not yet multiplied by the zone share)
+#'   and `unkeyed` (`match_id`, `team`, `pool_du`: credit with no key, which the
+#'   zone share spreads by time on ground).
+#' @keywords internal
+.np_tm_zone_credit <- function(prow, p, lu, zone_keys, zone_mix) {
+  d <- prow[dcred == TRUE, .(match_id = as.character(match_id),
+                             display_order = as.integer(display_order), team, v = pool_row)]
+  actor <- unique(p[!is.na(player_id), .(match_id = as.character(match_id),
+                                         display_order = as.integer(display_order),
+                                         actor = as.character(player_id))],
+                  by = c("match_id", "display_order"))
+  d[actor, on = .(match_id, display_order), actor := i.actor]
+  zk <- data.table::copy(zone_keys)
+  d[zk, on = .(match_id, display_order), `:=`(dfd = i.dfd, tgt = i.tgt)]
+  if (!"dfd" %in% names(d)) d[, dfd := NA_character_]
+  if (!"tgt" %in% names(d)) d[, tgt := NA_character_]
+  ros <- lu[, .(match_id, team, player_id, position)]
+  d[, dfd_ok := FALSE]
+  d[ros, on = .(match_id, team, dfd = player_id), dfd_ok := TRUE]
+  slot <- unique(ros[, .(match_id, player_id, position)], by = c("match_id", "player_id"))
+  d[slot, on = .(match_id, tgt = player_id), tgt_zone := .np_zone_of(i.position)]
+  d[slot, on = .(match_id, actor = player_id), act_zone := .np_zone_of(i.position)]
+  if (!"tgt_zone" %in% names(d)) d[, tgt_zone := NA_character_]
+  if (!"act_zone" %in% names(d)) d[, act_zone := NA_character_]
+  d[, zone_key := data.table::fcase(
+    dfd_ok, paste0("P:", dfd),
+    !is.na(tgt_zone), paste0("T:", tgt_zone),
+    !is.na(act_zone), paste0("D:", act_zone),
+    default = NA_character_)]
+  kt <- d[, .(pts = sum(v), n = .N),
+          by = .(k = data.table::fifelse(is.na(zone_key), "none", substr(zone_key, 1L, 1L)))]
+  cli::cli_alert_info(
+    "Zone credit (team-margin layer): {paste0(kt$k, ' ', format(kt$n, big.mark = ','), ' rows / ', round(kt$pts, 1), ' pts', collapse = '; ')} (P = named defender, T = target zone, D = zone of the player with the ball)")
+
+  kp <- d[!is.na(zone_key), .(v = sum(v)), by = .(match_id, team, zone_key)]
+  grp <- c("match_id", "team", "zone_key")
+  a <- merge(kp, lu[, .(match_id, team, player_id, tog, position)],
+             by = c("match_id", "team"), allow.cartesian = TRUE)
+  keyed <- NULL
+  if (nrow(a)) {
+    .np_zone_weights(a, grp, zone_mix)
+    a[, ws := sum(w), by = grp]
+    a[, zalloc := data.table::fifelse(ws > 0, v * w / ws, 0)]
+    lost <- kp[!a[, .(s = sum(zalloc)), by = grp][abs(s) > 0], on = grp]
+    if (nrow(lost)) {
+      cli::cli_abort("Zone credit: {nrow(lost)} keyed group{?s} found no player to pay ({round(sum(lost$v), 2)} points).")
+    }
+    keyed <- a[, .(zalloc = sum(zalloc)), by = .(match_id, team, player_id)]
+  }
+  unkeyed <- d[is.na(zone_key), .(pool_du = sum(v)), by = .(match_id, team)]
+  list(keyed = keyed, unkeyed = unkeyed)
+}

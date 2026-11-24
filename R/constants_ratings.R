@@ -1866,6 +1866,18 @@ NP_ZONE_OF_SLOT <- c(
 #' @keywords internal
 NP_ZONE_SHRINK_N <- 50
 
+#' Share of the defending side's unnamed credit that follows the zone rule
+#'
+#' Read only under `NP_POOL_SPREAD = "zone"`, in `.np_team_margin()` (the layer
+#' that decides the published value). Production splits that credit
+#' `NP_POOL_DACTS_SHARE` by defensive acts and the rest by time on ground; the
+#' arm moves `NP_POOL_ZONE_SHARE` of it from time on ground to the zone rule.
+#' 0.5 with the default dacts share replaces the whole time-on-ground half
+#' (2026-11-25: the zone rule already spreads by TOG inside a zone). Thirds
+#' (zone 1/3, dacts 1/3, TOG 1/3) is the alternative Pete raised.
+#' @keywords internal
+NP_POOL_ZONE_SHARE <- 0.5
+
 #' Positional mirror: who marks whom
 #'
 #' The geometric matchup. Left/right flip because the two teams attack in

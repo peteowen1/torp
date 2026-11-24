@@ -78,3 +78,24 @@ test_that("the zone mix is shrunk toward the overall mix and each key sums to on
   expect_equal(mix[zone_key == "T:key_fwd" & def_zone == "back_pocket", n_src], 1L)
   expect_false(any(grepl("^D:", mix$zone_key) & mix$n_src > 2))
 })
+
+test_that("team-margin zone credit: named defender takes his row, plain rows split by zone, unkeyed rows are returned", {
+  prow <- data.table::data.table(
+    match_id = "m1", display_order = c(10L, 20L, 30L), team = "Def",
+    pool_row = c(2, 1, 0.5), dcred = TRUE)
+  p <- data.table::data.table(match_id = "m1", display_order = c(10L, 20L, 30L),
+                              player_id = c("f1", "f2", "zz"))
+  lu <- zone_lineup()[, .(match_id, team, player_id, tog, position)]
+  lu <- rbind(lu, data.table::data.table(match_id = "m1", team = "Att",
+                                         player_id = c("f1", "f2"), tog = 1, position = c("FF", "CHF")))
+  zk <- data.table::data.table(match_id = "m1", display_order = 10L, dfd = "bp1", tgt = "f1")
+  res <- suppressMessages(.np_tm_zone_credit(prow, p, lu, zk, zone_mix_toy()))
+  k <- res$keyed
+  # row 10: named defender bp1 takes 2; row 20: D:key_fwd (f2 is CHF) splits 1 by the toy mix
+  present <- 0.40 + 0.20 + 0.10 + 0.10
+  expect_equal(k[player_id == "bp1", zalloc], 2 + 0.20 / present)
+  expect_equal(k[player_id == "kb1", zalloc], 0.40 / present / 1.5)
+  expect_equal(sum(k$zalloc), 3)
+  # row 30: the actor has no slot, so it is unkeyed and goes back for the TOG spread
+  expect_equal(res$unkeyed$pool_du, 0.5)
+})
