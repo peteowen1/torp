@@ -20,7 +20,8 @@ The team-aggregation in \code{\link[=.build_team_ratings_df]{.build_team_ratings
 \code{\link[=.build_match_features]{.build_match_features()}} each used to spell this list out, so a rating added
 to one and not the other vanished silently. \code{include_xrapm} is the one
 difference that is kept on purpose, for now: \code{.build_team_ratings_df()} sums
-\code{xrapm}, but \code{.build_match_features()} has never carried it through, which
+\code{xrapm}, but \code{.build_match_features()} carries it through only when called
+with \code{include_xrapm = TRUE}. Production uses the default \code{FALSE}, which
 leaves \code{xrapm_diff} a constant 0 in the model frame (see the note at the
 call in \code{.build_match_features()}).
 }

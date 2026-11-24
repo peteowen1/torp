@@ -45,8 +45,19 @@ stopifnot(grades[, abs(sum(net_turned)), by = .(year, trade)][, max(V1)] < 1e-6)
 # so the net only has to stay a clear Adelaide win.
 dawson <- grades[year == 2021 & trade == 11 & club == "Adelaide", net_turned]
 dawson_played <- assets[year == 2021 & item == "Jordan Dawson", played]
-stopifnot(length(dawson) == 1, dawson > 400, length(dawson_played) == 1, abs(dawson_played - 408.1) < 0.05)
+# (net_turned counts Dawson at PLAYER_VALUE_FACTOR: about +460 unscaled, about +205 at 0.5.)
+stopifnot(length(dawson) == 1, dawson > 150, length(dawson_played) == 1, abs(dawson_played - 408.1) < 0.05)
 stopifnot(setequal(unique(grades$year), YEARS), nrow(unique(grades[, .(year, trade)])) == 79)
+# Show traded players at the share they count for in the grade, so each club's
+# rows add up to its v_in. Draftees (pick rows) are shown in full.
+source("C:/dev/torpverse/torp/data-raw/08-trade-value/trade_constants.R")
+assets[type == "player", `:=`(played = round(played * PLAYER_VALUE_FACTOR, 1),
+                              value = round(value * PLAYER_VALUE_FACTOR, 1))]
+assets[, still_ := still]
+assets[type == "player", forecast := fifelse(still_, round(value - played, 1), 0)]
+assets[, still_ := NULL]
+stopifnot(assets[, .(s = sum(value)), by = .(year, trade, to_club)][
+  grades, on = .(year, trade, to_club = club), nomatch = NULL][, max(abs(s - v_in))] < 0.1 * 20)
 
 trades <- lapply(split(grades, by = c("year", "trade"), sorted = TRUE), function(g) {
   y <- g$year[1]; t <- g$trade[1]
@@ -69,7 +80,7 @@ out <- list(
     value = "Value is games played x time on ground x how far the player's TORP rating was above a replacement-level player, summed over 8 seasons from the trade, with later seasons counting 10% less each year. Picks count as the player the club drafted with them.",
     forecast = "Players are valued on the seasons they played for the club plus a forecast of the rest of the 8-year window: from now if they are still there, or from the day the club traded them on. For these years the forecast is 20% (2021) to 40% (2022) of the value. A forecast can be below zero when a player is expected to rate below a replacement-level player. It is a middle estimate: players taken with the first few draft picks have, on average, done better than it expects.",
     untraced = "We follow each pick to the player drafted with it. Where we could not (mostly late picks used to match bids), the pick keeps its value on the day of the trade.",
-    salary = "Grades do not count what clubs pay players. A club that takes on a big contract gets the player's full value here, so these grades lean towards clubs that took on players.",
+    salary = "A player a club receives in a trade counts at half his value, picks in full. That half stands in for what clubs pay players, which the value leaves out: across 2021-2026, clubs taking on a player gave up about a third of his value in picks. Players drafted with a pick count in full, being on rookie contracts.",
     not_2026 = "This year's trades are not graded here yet."),
   trades = trades)
 dest <- file.path(out_dir, "trade_grades.json")

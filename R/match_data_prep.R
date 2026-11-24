@@ -139,7 +139,8 @@
 #' [.build_match_features()] each used to spell this list out, so a rating added
 #' to one and not the other vanished silently. `include_xrapm` is the one
 #' difference that is kept on purpose, for now: `.build_team_ratings_df()` sums
-#' `xrapm`, but `.build_match_features()` has never carried it through, which
+#' `xrapm`, but `.build_match_features()` carries it through only when called
+#' with `include_xrapm = TRUE`. Production uses the default `FALSE`, which
 #' leaves `xrapm_diff` a constant 0 in the model frame (see the note at the
 #' call in `.build_match_features()`).
 #'

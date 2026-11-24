@@ -18,6 +18,7 @@
 
 suppressMessages({ library(data.table); library(rvest) })
 source("data-raw/08-trade-value/draft_names.R")
+source("data-raw/08-trade-value/trade_constants.R")
 suppressMessages(devtools::load_all("C:/dev/torpverse/torp", quiet = TRUE))
 raw_dir <- "C:/dev/torpverse/torpdata/data/raw/trades_2026"
 out_dir <- "C:/dev/torpverse/torpdata/data/raw/trade_value"
@@ -243,12 +244,15 @@ a[rk, on = "band", `:=`(value_net = fifelse(type != "player", value * i.rookie_s
 stopifnot(a[, !anyNA(value_net) && !anyNA(value_club_net)])
 
 # ---- 3. Grade ----
-# value in for each club minus value out, per trade
-g_in  <- a[, .(v_in = sum(value, na.rm = TRUE), v_in_abc = sum(value_abc, na.rm = TRUE),
-               v_in_club = sum(value_club), v_in_net = sum(value_net), v_in_club_net = sum(value_club_net),
+# value in for each club minus value out, per trade. Players count at
+# PLAYER_VALUE_FACTOR (trade_constants.R) in the grade columns; the salary
+# what-ifs (*_net) model pay directly, so they stay unscaled.
+a[, pw := fifelse(type == "player", PLAYER_VALUE_FACTOR, 1)]
+g_in  <- a[, .(v_in = sum(value * pw, na.rm = TRUE), v_in_abc = sum(value_abc * pw, na.rm = TRUE),
+               v_in_club = sum(value_club * pw), v_in_net = sum(value_net), v_in_club_net = sum(value_club_net),
                got = paste(item, collapse = "; ")), by = .(trade, club = to_club)]
-g_out <- a[, .(v_out = sum(value, na.rm = TRUE), v_out_abc = sum(value_abc, na.rm = TRUE),
-               v_out_club = sum(value_club), v_out_net = sum(value_net), v_out_club_net = sum(value_club_net)),
+g_out <- a[, .(v_out = sum(value * pw, na.rm = TRUE), v_out_abc = sum(value_abc * pw, na.rm = TRUE),
+               v_out_club = sum(value_club * pw), v_out_net = sum(value_net), v_out_club_net = sum(value_club_net)),
            by = .(trade, club = from_club)]
 gr <- merge(g_in, g_out, by = c("trade", "club"), all = TRUE)
 for (v in c("v_in", "v_out", "v_in_abc", "v_out_abc", "v_in_net", "v_out_net", "v_in_club_net", "v_out_club_net"))

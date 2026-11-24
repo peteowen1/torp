@@ -33,7 +33,8 @@
 # bids). If that pick has gone by then, the next pick still in the order bids.
 #
 # Scenarios: A (Richmond bids on Walker), B (Essendon does), P (Cal Twomey's
-# Phantom Draft bids, 2026-11-17) and Q (P after his GWS-Port pick-12 trade).
+# Phantom Draft bids, 2026-11-17), Q (P after his GWS-Port pick-12 trade) and
+# L (his Late Mail Phantom, 2026-11-18: Q plus two more pre-bid trades).
 #
 # Output: torpdata/data/raw/trade_value/06c_bids_in_sequence.csv (gitignored)
 
@@ -185,6 +186,22 @@ start_saved <- start
 start <- copy(start)[start == 12L, club := "GWS"][start %in% c(20L, 26L), club := "PORT"]
 Q <- run_sequence(cP, "Q: Phantom + GWS gets pick 12 for 20 and 26")
 start <- start_saved
+# Scenario L: Twomey's Late Mail Phantom (AFL.com.au news 1641905, published
+# 2026-11-18 6:18pm, raw copy torpdata/data/raw/trades_2026/official/afl_1641905_*).
+# His top 30 bids only on Cochrane (Essendon 1), Walker (Richmond 2), Matthews
+# (Melbourne 4) and Murray (Melbourne 14, he has Murray at final pick 15), so
+# Boi and El Souki are left out; Justice stays at 37 as in P. Trades on top of Q:
+#   - named: Carlton sends 13 to Adelaide for 15 and 35, "when the bid comes for
+#     Walker" (entered before the draft, so Carlton pays with 15+18);
+#   - INFERRED: Brisbane's 21 goes to Port and Port's 24 to Brisbane. He has Port
+#     at final 20 "in trade with Brisbane" and Brisbane still picking at final
+#     28; this swap is the only one that fits his whole top 30. Not stated.
+cL <- cP[!player %in% c("Keenan Boi", "Khaled El Souki")]
+start <- copy(start)[start == 12L, club := "GWS"][start %in% c(20L, 26L), club := "PORT"]
+start[start == 13L, club := "ADEL"][start %in% c(15L, 35L), club := "CARL"]
+start[start == 21L, club := "PORT"][start == 24L, club := "BL"]
+L <- run_sequence(cL, "L: Late Mail Phantom (Q + Carlton-Adelaide, Brisbane-Port)")
+start <- start_saved
 
 # ---- Anchors, written before the first run ----
 # 1. The first bid has nothing ahead of it, so it must equal 06's row exactly.
@@ -213,7 +230,16 @@ stopifnot(qc$bid_live == a1$bid_live, qc$cost_points == a1$cost_points, qc$used_
           qc$deficit_points == 400, qc$can_match)
 cat("anchors hold: Phantom Cochrane/Walker equal A; Q Cochrane 1 / 2,700 / 7+20 / 400 short\n")
 cat("Phantom live picks (P): ", paste(P$player, P$bid_live, collapse = "; "), "\n")
-both <- rbind(A, B, P, Q)
+# 6. L's Cochrane is Q's (Port's hand does not change); Walker is bid at the same
+#    live pick, but Carlton now pays with starting 15 and 18.
+lc <- L[player == "Dougie Cochrane"]; lw <- L[player == "Cody Walker"]
+stopifnot(identical(lc[, .(bid_live, cost_points, used_start, deficit_points)],
+                    qc[, .(bid_live, cost_points, used_start, deficit_points)]),
+          lw$bid_live == 3, lw$used_start == "15+18")
+cat("anchors hold: L Cochrane equals Q; L Walker live 3, paid with starting 15+18\n")
+cat("Late Mail live picks (L): ", paste(L$player, L$bid_live, collapse = "; "),
+    "| Twomey has Murray at final 15\n")
+both <- rbind(A, B, P, Q, L)
 fwrite(both, file.path(out_dir, "06c_bids_in_sequence.csv"))
 old <- e$res[, .(player, old_cost = cost_points, old_deficit = deficit_points, old_can = can_match, old_gain = gain_torp)]
 show <- merge(both, old, by = "player")[order(scenario, bid_live)]

@@ -21,6 +21,11 @@ order <- fread(order_file)
 bids  <- fread(file.path(out_dir, "06_bid_pricing.csv"))
 grid  <- fread(file.path(out_dir, "06_bid_grid.csv"))
 ranges <- fread(file.path(out_dir, "06_bid_ranges.csv"))
+# Every tied prospect priced at every pick 1-54 (06b), for the page's bid calculator:
+# the seven priced bids from 06b plus Hodge and McCartney from 06's grid.
+grid_all <- rbind(fread(file.path(out_dir, "06_all_bids_grid.csv")), grid)
+stopifnot(nrow(grid_all) == 54 * 9, uniqueN(grid_all[, .(player, bid)]) == nrow(grid_all), !anyNA(grid_all$cost_points),
+          setequal(unique(grid_all$player), c(bids$player, unique(grid$player))))
 n_order <- nrow(order)
 cat("rows: curve", nrow(curve), "| order", n_order, "| bids", nrow(bids), "| grid", nrow(grid), "\n")
 
@@ -56,17 +61,20 @@ out <- list(
     order = sprintf("AFL final order, 11 November 2026 (%d picks). Compensation picks are added after night one.", n_order),
     torp_value = "Expected eight-season TORP value of a player taken at the pick, discounted 10% a year.",
     points = "Draft Value Index points (0 from pick 55).",
-    bids = "Bid positions from Cal Twomey's November form guide (AFL.com.au, 11 November 2026): a ranking, not a mock, so they will move. Boi at 30 is the first pick after Hawthorn's 29.",
+    bids = "Bid positions from Cal Twomey's Late Mail Phantom Draft (AFL.com.au, 18 November 2026), as the pick the bidding club starts the draft with. His top 30 has no bid on El Souki or Boi; they stay at 23 and 30 (30 is the first pick after Hawthorn's 29).",
     can_match = "The club can match if its shortfall is 412 points or less.",
-    bid_grid = "A bid priced at every pick 1-54 for Hodge (Hawthorn) and McCartney (North Melbourne); bid_ranges says where the press places them."),
+    bid_grid = "A bid priced at every pick 1-54 for Hodge (Hawthorn) and McCartney (North Melbourne); bid_ranges says where the press places them.",
+    bid_grid_all = "Every tied prospect (the seven above plus Hodge and McCartney) with a bid priced at every pick 1-54, on the starting order: what it costs, the picks the club pays with, how far short it falls and whether it can match."),
   picks = picks,
   bids = bids,
   bid_grid = grid,
+  bid_grid_all = grid_all,
   bid_ranges = ranges)
 dest <- file.path(out_dir, "draft_2026.json")
 write_json(out, dest, auto_unbox = TRUE, pretty = TRUE, na = "null", dataframe = "rows")
 
 back <- fromJSON(dest)
-stopifnot(nrow(back$picks) == n_order, nrow(back$bids) == nrow(bids), nrow(back$bid_grid) == 108, nrow(back$bid_ranges) == 2)
+stopifnot(nrow(back$picks) == n_order, nrow(back$bids) == nrow(bids), nrow(back$bid_grid) == 108, nrow(back$bid_ranges) == 2,
+          nrow(back$bid_grid_all) == 54 * 9)
 cat("wrote", dest, sprintf("(%.1f KB)", file.size(dest) / 1024), "\n")
 print(head(back$picks, 5))
