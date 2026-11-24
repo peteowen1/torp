@@ -128,8 +128,13 @@ KNOWN_NON_DEFINING <- c(
   # Worth knowing before they are swept: production runs spread = "matchup"
   # (build_net_points()'s match.arg default -- .np_engine_frame() never passes
   # `spread`, traced 2026-09-10), so NP_MIRROR_SHARE and NP_POSITION_MIRROR are
-  # LIVE on every team pool, while NP_CONTEXT_WEIGHTS is read only under
-  # spread = "context" and therefore cannot move a published number today.
+  # read on every team pool, while NP_CONTEXT_WEIGHTS is read only under
+  # spread = "context". CORRECTION 2026-11-25: none of the three moves a
+  # published number. Under NP_TEAM_MARGIN_CONVENTION, .np_team_margin()
+  # rebuilds each value from named payments and re-spreads every pool by TOG and
+  # defensive acts, so .np_spread_pool()'s output never reaches net_points:
+  # spread = "zone" there gave exactly 0 change on 2,484 player-matches
+  # (docs/plans/POSITIONAL-MIRROR-ARM.md).
   # None has been measured; that is the next audit session.
   "NP_MIRROR_SHARE", "NP_POSITION_MIRROR", "NP_CONTEXT_WEIGHTS",
   "NP_DISPOSAL_DESCS", "NP_EXCLUDED_DESCS",
