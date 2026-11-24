@@ -644,8 +644,9 @@ centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
 #'   returned frame as its \code{epv_engine} attribute and column.
 #'
 #' @param difficulty_terms v4 only: precomputed difficulty terms from
-#'   `np_difficulty_terms_for_season()` (leak-safe). Fitted in-sample, with a
-#'   warning, when `NULL`.
+#'   `np_difficulty_terms_for_season()` (leak-safe). When `NULL` and no
+#'   `np_fit` is given, a one-season frame is fitted on the season before
+#'   (`NP_DIFFICULTY_FIT`, torp#258).
 #' @param pre_match Pre-match forecasts (`match_id`, `home_win_prob`,
 #'   optional `source`) for the WPA ledger (`build_wpa_ledger()`); when
 #'   `NULL`, locked forecasts filled by retrodictions for the seasons in

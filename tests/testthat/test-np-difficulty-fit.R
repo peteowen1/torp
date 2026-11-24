@@ -22,7 +22,10 @@ routing_case <- function(match_ids, np_fit = NULL, difficulty_terms = NULL,
       data.table::data.table(x = 1)
     },
     .np_team_margin = function(np, ...) np,
-    .env = asNamespace("torp")
+    # .package, not .env: in testthat 3.x `.env` is the frame whose exit undoes
+    # the mocks, so passing the namespace there left them in place for every
+    # later test file in the session (24 failures in test-epv-net-points.R).
+    .package = "torp"
   )
   .np_engine_frame(data.table::data.table(match_id = match_ids), NULL, NULL,
                    difficulty_terms = difficulty_terms, np_fit = np_fit,
@@ -55,6 +58,10 @@ test_that("a multi-season frame keeps the rolling within-data fit", {
   expect_null(s$for_season)
   expect_null(s$terms)
   expect_true(s$leak_safe)
+})
+
+test_that("an unparseable match_id stops the prior-season fit with a clear error", {
+  expect_error(routing_case("M1"), "Could not parse a season")
 })
 
 test_that("NP_DIFFICULTY_FIT is registered with the vintage guard", {
