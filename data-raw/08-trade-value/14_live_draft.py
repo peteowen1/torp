@@ -1,5 +1,12 @@
 """Live draft feed for the inthegame.blog draft page (inthegame-blog#1059).
 
+RE-USING IT FOR ANOTHER DRAFT (review note, 24 Nov 2026): the 2026 Wikipedia
+page name, the draft_2026.json input, the output paths and the R2 key
+(afl/draft-2026-live.json) are hard-coded below, so edit all of them first or
+the run overwrites the 2026 file. Also delete live/last_upload.json: it keeps
+the 2026 pick count, and the "fewer picks than the last upload" check would
+then block every upload of the new draft, which shows only as a log line.
+
 Every --interval seconds:
   1. read the "2026 national draft" table from Wikipedia's 2026 AFL draft page
      (MediaWiki API, named client, one request a cycle) and save each NEW
