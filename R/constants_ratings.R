@@ -1929,6 +1929,20 @@ NP_TURNOVER_ON_ALL_ACTS <- TRUE
 #' @keywords internal
 NP_TEAM_MARGIN_CONVENTION <- TRUE
 
+#' Which season a one-season frame's difficulty models are fitted on
+#'
+#' `"prior_season"` (since v18, torp#258, Pete 2026-11-10): a frame built from
+#' one season's play-by-play has its disposal-difficulty and contest models
+#' fitted on the season before (2021, the first season with chains, on 2022),
+#' through `np_difficulty_terms_for_season()`. That is the basis every gate
+#' since the v3/v4 flip was measured on. `"in_sample"` is the old behaviour:
+#' fit on the season being rated, which lets the models see the outcomes they
+#' then price and re-scores every published match each round as the season
+#' grows. Multi-season frames and frames priced on a saved season fit
+#' (`np_fit`) are unaffected by this setting.
+#' @keywords internal
+NP_DIFFICULTY_FIT <- "prior_season"
+
 #' Share of a row paid to the named player under the team-margin convention
 #'
 #' The rest goes to that side's pool. NA keeps whatever shares the ledger

@@ -101,6 +101,9 @@
     # number, so the drift guard has to see them.
     NP_TEAM_MARGIN_CONVENTION = NP_TEAM_MARGIN_CONVENTION,
     NP_TEAM_MARGIN_NAMED_SHARE = NP_TEAM_MARGIN_NAMED_SHARE,
+    # torp#258 (v18): which season a one-season frame's difficulty and contest
+    # models are fitted on. Moves every published net points figure.
+    NP_DIFFICULTY_FIT = NP_DIFFICULTY_FIT,
     NP_TEAM_MARGIN_POOL_BY = NP_TEAM_MARGIN_POOL_BY,
     # v14: every row books both sides, and the defence's unnamed pool credit is
     # shared half by defensive acts. Booking alone moves nothing while the pool

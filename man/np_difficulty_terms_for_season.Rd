@@ -9,7 +9,8 @@ np_difficulty_terms_for_season(
   pbp_data = NULL,
   chains = NULL,
   train_season = NULL,
-  available = 2021:get_afl_season()
+  available = 2021:get_afl_season(),
+  return_models = FALSE
 )
 }
 \arguments{
@@ -21,6 +22,9 @@ np_difficulty_terms_for_season(
 \code{season + 1} when \code{season} is the earliest in \code{available}.}
 
 \item{available}{Seasons chains exist for.}
+
+\item{return_models}{Attach the fitted models as attribute \code{np_models}, so
+a season fit bundle can carry them to the live path.}
 }
 \value{
 \code{.np_difficulty_terms()} output for \code{season}.

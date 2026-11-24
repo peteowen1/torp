@@ -2480,11 +2480,14 @@ check_net_points_conservation <- function(np, tol = 1e-6) {
 #' @param train_season Season to fit on. Defaults to `season - 1`, or
 #'   `season + 1` when `season` is the earliest in `available`.
 #' @param available Seasons chains exist for.
+#' @param return_models Attach the fitted models as attribute `np_models`, so
+#'   a season fit bundle can carry them to the live path.
 #' @return `.np_difficulty_terms()` output for `season`.
 #' @export
 np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NULL,
                                            train_season = NULL,
-                                           available = 2021:get_afl_season()) {
+                                           available = 2021:get_afl_season(),
+                                           return_models = FALSE) {
   season <- as.integer(season)
   if (is.null(train_season)) {
     train_season <- if (season <= min(available)) season + 1L else season - 1L
@@ -2497,7 +2500,8 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
   tr_ch <- load_chains(train_season, rounds = TRUE)
   on.exit(rm(tr_pbp, tr_ch), add = TRUE)
   .np_difficulty_terms(pbp_data, chains, leak_safe = FALSE,
-                       train_pbp = tr_pbp, train_chains = tr_ch)
+                       train_pbp = tr_pbp, train_chains = tr_ch,
+                       return_models = return_models)
 }
 
 #' Net points as the v4 EPV engine's player-game frame
@@ -2528,6 +2532,19 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
 #' @keywords internal
 .np_engine_frame <- function(pbp_data, player_stats, chains, difficulty_terms = NULL,
                              results = NULL, np_fit = NULL, return_fit = FALSE) {
+  # torp#258: a one-season frame is priced on models fitted on the season
+  # before, the basis the gates measured. Done here so no builder can forget
+  # it. The returned models ride on the terms (attribute `np_models`), so the
+  # season fit bundle the live path reuses holds the same prior-season fit.
+  if (is.null(difficulty_terms) && is.null(np_fit)) {
+    seasons <- unique(as.integer(substr(as.character(pbp_data$match_id), 5, 8)))
+    if (length(seasons) == 1L && identical(NP_DIFFICULTY_FIT, "prior_season")) {
+      difficulty_terms <- np_difficulty_terms_for_season(
+        seasons, pbp_data, chains, return_models = isTRUE(return_fit))
+    } else if (!NP_DIFFICULTY_FIT %in% c("prior_season", "in_sample")) {
+      cli::cli_abort("Unknown {.code NP_DIFFICULTY_FIT} {.val {NP_DIFFICULTY_FIT}}.")
+    }
+  }
   res <- .np_match_results(pbp_data, results)
   np <- build_net_points(pbp_data, player_stats, res, chains = chains,
                          credit = "difficulty", stoppages = "allocate",
