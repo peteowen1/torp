@@ -9,7 +9,7 @@
     {
       "name": "Daily ratings and predictions",
       "workflow": "daily-ratings-predictions.yml",
-      "about": "Two jobs one after the other: compute-ratings, then build-predictions. Each installs R first. Runs counted are successful ones on the main branch where both jobs succeeded and the run took over 10 minutes. The workflow on the dev branch has since gained an off-season gate job (offseason-gate) that skips scheduled runs when no match is near; it is listed below as optional because the runs counted here came from main, before it.",
+      "about": "Three jobs one after the other: offseason-gate, compute-ratings, then build-predictions. The gate (merged to main 25 Nov 2026, torp#325) skips the two R jobs on scheduled runs when no match is near; each R job installs R first. Runs counted are successful ones on the main branch where both R jobs succeeded and the run took over 10 minutes, so they predate the gate, which is why it is listed below as optional.",
       "triggers": "In practice the four weekly pre-game schedule runs, so predictions use the published team lists: Thursday and Friday at 5pm and Saturday and Sunday at 11am, Sydney summer time; all five runs counted here were schedule runs. Also started by torpdata's Daily Data Release, which sends the ratings-trigger event after a real data release (within hours of a match ending), and by hand with Run workflow (inputs: force, week_override, seasons). When build-predictions succeeds it sends the blog-trigger event to torpdata, which starts torpdata's Build blog data run (see torpdata's guide). The two runs are not stitched together here.",
       "select": {
         "events": ["schedule", "workflow_dispatch", "repository_dispatch"],
@@ -22,7 +22,7 @@
           "name": "offseason-gate",
           "match": "^offseason-gate$",
           "optional": true,
-          "about": "Only on dev so far: on scheduled runs asks whether any match starts in the next 14 days or finished since the last ratings upload, and skips the two jobs below if not",
+          "about": "On scheduled runs asks whether any match starts in the next 14 days or finished since the last ratings upload, and skips the two jobs below if not",
           "steps": {
             "Anything to do?": "Reads when torp_ratings.parquet was last uploaded and runs data-raw/02-models/offseason_gate.R, which decides whether the run is needed"
           }
