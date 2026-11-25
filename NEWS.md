@@ -1,3 +1,7 @@
+# torp 1.11.7
+
+* Net points can charge a free kick given away to the player who gave it away, and credit a chains-recorded tackle from his side's pool, behind three new flags that are off by default: `NP_FREE_AGAINST_BLAME`, `NP_TACKLE_POOL_SHARE` and `NP_TACKLE_STOPPAGE_SHARE` (new `.np_tackle_actor()`; payment role `tackle`, labelled "Tackling (chains)"). Each moves who is paid, never the amount. Gated leak-free out of sample 2022-2026: neutral (log loss 0.56134 to 0.56133). They turn on with the v18 vintage. New gate script `data-raw/04-analysis/run_epr_gate_free_against_tackles.R`. Published numbers are unchanged.
+
 # torp 1.11.6
 
 * One play-by-play scoring function, `.score_pbp()` (internal), replaces the seven-step EP/WP chain written out by hand in the nightly `update_season_pbp()`, `rebuild_all_release_data.R`, both `rebuild_everything.R` phases and `get_player_game_ratings()`; output is `identical()` to before (review W9). `rebuild_everything.R` and `rebuild_all_release_data.R` now refuse a local `torpdata/data/` (`options(torp.local_data_dir = NA)`) and run with `VERSEBUS_STRICT=1`, as the nightly does. The unused legacy `data-raw/01-data/release_data.R` is deleted. New `data-raw/05-validation/score_ep_wp_out_of_time.R`, the EP/WP out-of-time scorecard (review W13), and `compare_benchmarks()` in `data-raw/04-analysis/benchmark_suite.R` no longer prints a 0 delta when both arms share a label. Published numbers are unchanged.
