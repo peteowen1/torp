@@ -1591,3 +1591,30 @@ test_that("terms covering every season in a multi-season call do not trip the pe
                                       difficulty_terms = terms,
                                       reconcile = FALSE, spread = "tog")))
 })
+
+test_that(".np_tackle_actor ties a chains Tackle to the PBP act before it", {
+  seq <- data.table::data.table(
+    match_id = "m1", display_order = 1:5,
+    description = c("Handball", "Tackle", "Loose Ball Get", "Ball Up Call", "Tackle"),
+    player_id = c("p1", "t1", "p2", NA, "t2"), team = c("A", "B", "B", NA, "A"),
+    in_pbp = c(TRUE, FALSE, TRUE, TRUE, FALSE))
+  tk <- .np_tackle_actor(seq)
+  expect_equal(tk$display_order, c(1L, 4L))
+  expect_equal(tk$tackle_pid, c("t1", "t2"))
+  expect_equal(tk$tackle_team, c("B", "A"))
+  expect_equal(nrow(.np_tackle_actor(seq[description != "Tackle"])), 0L)
+})
+
+test_that("NP_FREE_AGAINST_BLAME routes a teammate's Free Against through the error finder", {
+  seq <- data.table::data.table(
+    match_id = "m1", display_order = 1:3,
+    description = c("Handball", "Free Against", "Free For"),
+    player_id = c("disposer", "offender", "opp"), team = c("A", "A", "B"),
+    in_pbp = c(TRUE, FALSE, TRUE))
+  expect_equal(nrow(.np_error_actor(seq)), 0L)          # off: nothing moves
+  local_mocked_bindings(NP_FREE_AGAINST_BLAME = TRUE, .package = "torp")
+  e <- .np_error_actor(seq)
+  expect_equal(e$err_pid, "offender")
+  expect_equal(e$display_order, 1L)
+  expect_equal(e$err_desc, "Free Against")
+})

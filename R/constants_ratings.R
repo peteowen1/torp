@@ -2112,6 +2112,38 @@ NP_ERROR_DESCS <- c("Mark Fumbled", "Mark Dropped", "Dropped Mark",
 #' @keywords internal
 NP_ERROR_BLAME_SHARE <- 1
 
+#' Charge a free kick given away to the player who gave it away
+#'
+#' Test-version flag, off by default (Pete, 2026-11-25; plan
+#' \code{docs/plans/NP-FREE-AGAINST-AND-TACKLES.md}). "Free Against" is a
+#' chains-only row, so today the debit stays with the teammate whose disposal
+#' came before it (2026 R0: Sam De Koning wears the free Jack Henry gave away).
+#' \code{TRUE} adds it to the \code{NP_ERROR_DESCS} route, so
+#' \code{NP_ERROR_BLAME_SHARE} of that debit moves to the player named on the
+#' Free Against row. It moves the recipient, never the amount.
+#' @keywords internal
+NP_FREE_AGAINST_BLAME <- FALSE
+
+#' Share of a turnover's defence pool paid to the chains tackler who forced it
+#'
+#' Test-version flag, 0 (off) by default (Pete, 2026-11-25). When a chains-only
+#' "Tackle" row follows the opposition's act and the tackler's side holds a
+#' \code{defence_pool} payment on that act (the ball was won from the other
+#' side), this share of that pool payment is paid to the tackler by name. The
+#' amount is unchanged, so conservation holds. 0.5 is the decided value when on.
+#' @keywords internal
+NP_TACKLE_POOL_SHARE <- 0
+
+#' Share of a stoppage pool paid to the chains tackler in that stoppage
+#'
+#' Test-version flag, 0 (off) by default (Pete, 2026-11-25). When a chains-only
+#' "Tackle" row follows a stoppage, this share of the tackler's own side's
+#' \code{stoppage_pool} payment on that stoppage is paid to him by name,
+#' whatever its sign. Every other tackle is paid nothing. 0.5 is the decided
+#' value when on.
+#' @keywords internal
+NP_TACKLE_STOPPAGE_SHARE <- 0
+
 #' A quarter's last act is nobody's loss: its evaporated state goes to the pool
 #'
 #' `delta_epv` is built within (match, period), so the last row of a quarter
