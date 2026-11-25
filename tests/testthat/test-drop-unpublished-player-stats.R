@@ -28,6 +28,8 @@ test_that("no publish path selects on n_distinct any more", {
   files <- file.path(root, c("R/load_data.R", "data-raw/01-data/daily_release.R", "data-raw/rebuild_everything.R"))
   skip_if_not(all(file.exists(files)), "source tree not available (installed package)")
   for (f in files) {
-    expect_false(any(grepl("n_distinct(.) > 1", readLines(f, warn = FALSE), fixed = TRUE)), info = f)
+    lines <- readLines(f, warn = FALSE)
+    expect_false(any(grepl("n_distinct(.) > 1", lines, fixed = TRUE)), info = f)
+    expect_true(any(grepl(".drop_unpublished_player_stats_columns(", lines, fixed = TRUE)), info = f)
   }
 })
