@@ -47,7 +47,7 @@ wp_m <- suppressMessages(meta_seasons("wp"))
 trained <- union(ep_m$seasons, wp_m$seasons)
 
 season <- if (length(args) >= 1) as.integer(args[1]) else {
-  cand <- setdiff(seq(max(trained) + 1L, get_afl_season()), trained)
+  cand <- if (max(trained) < get_afl_season()) setdiff(seq(max(trained) + 1L, get_afl_season()), trained) else integer(0)
   if (!length(cand)) stop("no season after the training window ", paste(range(trained), collapse = "-"))
   max(cand)
 }
