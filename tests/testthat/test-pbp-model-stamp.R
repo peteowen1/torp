@@ -99,3 +99,22 @@ test_that("the report never fails on stale seasons, and fails only when the chec
   local_mocked_bindings(.current_pbp_model_id = function(...) stop("manifest unreachable"))
   expect_identical(suppressMessages(torp:::.report_stale_pbp_models(2026L, stamps = list())), "pbp_model_check")
 })
+
+test_that(".score_pbp runs the seven steps in order and stamps only when asked", {
+  steps <- c("clean_pbp", "clean_model_data_epv", "clean_shots_data", "add_shot_vars",
+             "add_epv_vars", "clean_model_data_wp", "add_wp_vars")
+  mk <- function(nm) function(df, ...) { attr(df, "trail") <- c(attr(df, "trail"), nm); df }
+  local_mocked_bindings(clean_pbp = mk("clean_pbp"), clean_model_data_epv = mk("clean_model_data_epv"),
+                        clean_shots_data = mk("clean_shots_data"), add_shot_vars = mk("add_shot_vars"),
+                        add_epv_vars = mk("add_epv_vars"), clean_model_data_wp = mk("clean_model_data_wp"),
+                        add_wp_vars = mk("add_wp_vars"),
+                        .stamp_pbp_models = function(pbp, id = NULL) { pbp$pbp_model_id <- "test-id"; pbp },
+                        .package = "torp")
+  x <- data.frame(a = 1:3)
+  s <- .score_pbp(x)
+  expect_identical(attr(s, "trail"), steps)
+  expect_identical(s$pbp_model_id, rep("test-id", 3))
+  u <- .score_pbp(x, stamp = FALSE)
+  expect_identical(attr(u, "trail"), steps)
+  expect_false("pbp_model_id" %in% names(u))
+})

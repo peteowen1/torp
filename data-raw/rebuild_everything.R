@@ -61,6 +61,14 @@ torpmodels_root <- if (file.exists("torpmodels/DESCRIPTION")) {
 devtools::load_all(torp_root)
 if (!is.null(torpmodels_root)) devtools::load_all(torpmodels_root)
 
+# Rebuilds read released data only: a sibling torpdata/data/ silently shadows the
+# releases (2026-07-27 stale-vintage incident), and only this option turns it off.
+# Strict mode and no asset-list cache, as daily_release.R (versebus §1.5).
+options(torp.local_data_dir = NA)
+stopifnot(is.null(get_local_data_dir()))
+Sys.setenv(VERSEBUS_STRICT = "1")
+Sys.setenv(piggyback_cache_duration = 1)
+
 # Interactive start-from prompt ----
 # When sourcing in RStudio, lets you pick which phase to start from.
 # Set START_FROM in the global env to skip the prompt, e.g. START_FROM <- 3
@@ -114,8 +122,8 @@ skip_model_upload <- "--skip-model-upload" %in% flag_args  # train + saveRDS loc
 
 # "only" flags disable everything else
 if (models_only) {
-  # Pin start_from = 4 so Phase 4 (models) runs non-interactively (default is 6,
-  # and start_from > 4 would force skip_models). Mirrors the --data-only fix.
+  # Pin start_from = 4 so Phase 4 (models) runs non-interactively (a START_FROM
+  # above 4 would force skip_models). Mirrors the --data-only fix.
   start_from <- 4L
   skip_api <- TRUE; skip_chains <- TRUE; skip_pbp <- TRUE
   skip_skills <- TRUE; skip_sim <- TRUE
@@ -334,15 +342,7 @@ if (run_pbp) {
         return(invisible(NULL))
       }
 
-      pbp <- chains |>
-        clean_pbp() |>
-        clean_model_data_epv() |>
-        clean_shots_data() |>
-        add_shot_vars() |>
-        add_epv_vars() |>
-        clean_model_data_wp() |>
-        add_wp_vars() |>
-        .stamp_pbp_models()
+      pbp <- .score_pbp(chains)
       save_to_release(pbp, paste0("pbp_data_", season, "_all"), "pbp-data")
       .record_pbp_model_stamps(season, pbp)
       cli::cli_inform("  pbp_{season}: {nrow(pbp)} rows")
@@ -421,15 +421,7 @@ if (run_pbp && run_models) {
         return(invisible(NULL))
       }
 
-      pbp <- chains |>
-        clean_pbp() |>
-        clean_model_data_epv() |>
-        clean_shots_data() |>
-        add_shot_vars() |>
-        add_epv_vars() |>
-        clean_model_data_wp() |>
-        add_wp_vars() |>
-        .stamp_pbp_models()
+      pbp <- .score_pbp(chains)
 
       save_to_release(pbp, paste0("pbp_data_", season, "_all"), "pbp-data")
       .record_pbp_model_stamps(season, pbp)

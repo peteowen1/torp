@@ -398,15 +398,7 @@ update_season_pbp <- function(season, round) {
   new_pbp <- tryCatch({
     chains <- get_match_chains(season, round)
     if (is.null(chains) || nrow(chains) == 0) return(NULL)
-    chains |>
-      clean_pbp() |>
-      clean_model_data_epv() |>
-      clean_shots_data() |>
-      add_shot_vars() |>
-      add_epv_vars() |>
-      clean_model_data_wp() |>
-      add_wp_vars() |>
-      .stamp_pbp_models()
+    .score_pbp(chains)
   }, error = function(e) {
     .record_skip(glue::glue("pbp {season} R{round}"), e)
     return(NULL)
