@@ -1,3 +1,7 @@
+# torp 1.11.6
+
+* One play-by-play scoring function, `.score_pbp()` (internal), replaces the seven-step EP/WP chain written out by hand in the nightly `update_season_pbp()`, `rebuild_all_release_data.R`, both `rebuild_everything.R` phases and `get_player_game_ratings()`; output is `identical()` to before (review W9). `rebuild_everything.R` and `rebuild_all_release_data.R` now refuse a local `torpdata/data/` (`options(torp.local_data_dir = NA)`) and run with `VERSEBUS_STRICT=1`, as the nightly does. The unused legacy `data-raw/01-data/release_data.R` is deleted. New `data-raw/05-validation/score_ep_wp_out_of_time.R`, the EP/WP out-of-time scorecard (review W13), and `compare_benchmarks()` in `data-raw/04-analysis/benchmark_suite.R` no longer prints a 0 delta when both arms share a label. Published numbers are unchanged.
+
 # torp 1.11.5
 
 * Every version of the AFL team lists is now kept, with the time it was fetched (torp#322, merged 22 Nov without this entry). `snapshot_afl_lineups()` (`R/lineup_snapshots.R`) fetches every match bouncing between 6 hours ago and 8 days ahead, and `save_lineup_snapshots()` appends to the `teams-snapshots` release: a log of every fetch, plus raw and parsed rows whenever a match's list changes. torpdata's hourly `lineup-snapshots.yml` runs it. `.fetch_cfs_batch()` gains `raw_env`, which keeps each response exactly as received. `data-raw/01-data/repair_injury_clubs_2026.R` is the one-off repair, already run, that moved 157 rows of the 24 Aug-1 Sep 2026 injury scrapes to the player's own club.
