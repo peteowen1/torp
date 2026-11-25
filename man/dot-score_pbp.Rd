@@ -16,8 +16,8 @@ anything published; \code{\link[=get_player_game_ratings]{get_player_game_rating
 Scored play-by-play.
 }
 \description{
-Every release path (the nightly \code{update_season_pbp()}, \code{release_data.R},
-\code{rebuild_all_release_data.R}, both \code{rebuild_everything.R} phases) and
+Every release path (the nightly \code{update_season_pbp()}, the since-deleted
+\code{release_data.R}, \code{rebuild_all_release_data.R}, both \code{rebuild_everything.R} phases) and
 \code{\link[=get_player_game_ratings]{get_player_game_ratings()}} used to write these seven steps out by hand (review W9,
 2026-11-15). This is the single copy. It is a pure pipe: callers keep their
 own empty-input checks, error handling and \code{.record_pbp_model_stamps()}.

@@ -25,7 +25,6 @@ data-raw/
 |--------|---------|
 | `get_stadium_data.R` | Scrape and process AFL stadium information |
 | `update_fixture_table.R` | Update fixture data from fitzRoy |
-| `release_data.R` | Package data for torpdata GitHub releases |
 
 ### 2. Model Training (`02-models/`)
 

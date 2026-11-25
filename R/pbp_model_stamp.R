@@ -89,8 +89,8 @@ PBP_MODEL_UNSTAMPED <- "unstamped"
 
 #' Score chains into play-by-play: the one EP / WP scoring chain
 #'
-#' Every release path (the nightly `update_season_pbp()`, `release_data.R`,
-#' `rebuild_all_release_data.R`, both `rebuild_everything.R` phases) and
+#' Every release path (the nightly `update_season_pbp()`, the since-deleted
+#' `release_data.R`, `rebuild_all_release_data.R`, both `rebuild_everything.R` phases) and
 #' [get_player_game_ratings()] used to write these seven steps out by hand (review W9,
 #' 2026-11-15). This is the single copy. It is a pure pipe: callers keep their
 #' own empty-input checks, error handling and `.record_pbp_model_stamps()`.

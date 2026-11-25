@@ -30,6 +30,14 @@ library(tictoc)
 torp_root <- if (file.exists("DESCRIPTION")) "." else if (file.exists("torp/DESCRIPTION")) "torp" else stop("Cannot find torp package")
 devtools::load_all(torp_root)
 
+# Rebuilds read released data only: a sibling torpdata/data/ silently shadows the
+# releases (2026-07-27 stale-vintage incident), and only this option turns it off.
+# Strict mode and no asset-list cache, as daily_release.R (versebus §1.5).
+options(torp.local_data_dir = NA)
+stopifnot(is.null(get_local_data_dir()))
+Sys.setenv(VERSEBUS_STRICT = "1")
+Sys.setenv(piggyback_cache_duration = 1)
+
 # Parse Args ----
 
 args <- commandArgs(trailingOnly = TRUE)
