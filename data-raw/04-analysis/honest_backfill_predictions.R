@@ -347,6 +347,8 @@ hb_predict_round <- function(frame, s, r, opts, prior = NULL, part_root = "_part
       d[[v]][d$.wx_imputed] <- stats::median(d[[v]][src], na.rm = TRUE)
     }
     d$log_wind <- log1p(d$wind_avg)
+    # keep the roof rule the model frame applied (MATCH_ROOF_ZERO_WEATHER)
+    if (isTRUE(torp:::MATCH_ROOF_ZERO_WEATHER)) d <- torp:::.roof_zero_weather(d)
   }
 
   t0 <- proc.time()[["elapsed"]]
