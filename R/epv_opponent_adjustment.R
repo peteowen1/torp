@@ -27,9 +27,7 @@
 .compute_rolling_epv_profiles <- function(pgd_dt, lambda_decay, prior_games) {
   # Step 1: Aggregate EPV to team-game level
   team_game <- pgd_dt[, .(
-    team_epv = sum(epv_adj * pmax(data.table::fifelse(
-      is.na(time_on_ground_percentage), 100,
-      as.numeric(time_on_ground_percentage)) / 100, 0.1), na.rm = TRUE),
+    team_epv = sum(epv_adj * .tog_weight(time_on_ground_percentage), na.rm = TRUE),
     game_date = as.Date(utc_start_time[1])
   ), by = .(match_id, team, opponent)]
 
@@ -251,9 +249,7 @@ adjust_epv_for_opponents <- function(player_game_data,
   if (!is.null(.engine)) data.table::setattr(dt, "epv_engine", .engine)
 
   # Compute each player's TOG share within their team for this game
-  dt[, .tog_safe := pmax(data.table::fifelse(
-    is.na(time_on_ground_percentage), 100,
-    as.numeric(time_on_ground_percentage)) / 100, 0.1)]
+  dt[, .tog_safe := .tog_weight(time_on_ground_percentage)]
   dt[, .team_tog := sum(.tog_safe, na.rm = TRUE), by = .(match_id, team)]
   dt[, .tog_share := .tog_safe / .team_tog]
 
