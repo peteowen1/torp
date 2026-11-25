@@ -334,15 +334,7 @@ if (run_pbp) {
         return(invisible(NULL))
       }
 
-      pbp <- chains |>
-        clean_pbp() |>
-        clean_model_data_epv() |>
-        clean_shots_data() |>
-        add_shot_vars() |>
-        add_epv_vars() |>
-        clean_model_data_wp() |>
-        add_wp_vars() |>
-        .stamp_pbp_models()
+      pbp <- .score_pbp(chains)
       save_to_release(pbp, paste0("pbp_data_", season, "_all"), "pbp-data")
       .record_pbp_model_stamps(season, pbp)
       cli::cli_inform("  pbp_{season}: {nrow(pbp)} rows")
@@ -421,15 +413,7 @@ if (run_pbp && run_models) {
         return(invisible(NULL))
       }
 
-      pbp <- chains |>
-        clean_pbp() |>
-        clean_model_data_epv() |>
-        clean_shots_data() |>
-        add_shot_vars() |>
-        add_epv_vars() |>
-        clean_model_data_wp() |>
-        add_wp_vars() |>
-        .stamp_pbp_models()
+      pbp <- .score_pbp(chains)
 
       save_to_release(pbp, paste0("pbp_data_", season, "_all"), "pbp-data")
       .record_pbp_model_stamps(season, pbp)

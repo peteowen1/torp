@@ -83,15 +83,7 @@ release_pbp_season <- function(season) {
     return(invisible(NULL))
   }
 
-  model_data_wp <- chains |>
-    clean_pbp() |>
-    clean_model_data_epv() |>
-    clean_shots_data() |>
-    add_shot_vars() |>
-    add_epv_vars() |>
-    clean_model_data_wp() |>
-    add_wp_vars() |>
-    .stamp_pbp_models()
+  model_data_wp <- .score_pbp(chains)
 
   file_name <- glue::glue("pbp_data_{season}_all")
   save_to_release(df = model_data_wp, file_name = file_name, release_tag = "pbp-data")

@@ -68,14 +68,7 @@ get_player_game_ratings <- function(match = NULL,
 
   # --- Step 1: Run EPV pipeline ---
   cli::cli_inform("Running EPV pipeline...")
-  pbp <- chains |>
-    clean_pbp() |>
-    clean_model_data_epv() |>
-    clean_shots_data() |>
-    add_shot_vars() |>
-    add_epv_vars() |>
-    clean_model_data_wp() |>
-    add_wp_vars()
+  pbp <- .score_pbp(chains, stamp = FALSE)
 
   # --- Step 2: Fetch player stats and lineups from API ---
   cli::cli_inform("Fetching player stats and lineups from API...")

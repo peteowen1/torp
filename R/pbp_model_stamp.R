@@ -87,6 +87,32 @@ PBP_MODEL_UNSTAMPED <- "unstamped"
   id
 }
 
+#' Score chains into play-by-play: the one EP / WP scoring chain
+#'
+#' Every release path (the nightly `update_season_pbp()`, `release_data.R`,
+#' `rebuild_all_release_data.R`, both `rebuild_everything.R` phases) and
+#' [get_player_game_ratings()] used to write these seven steps out by hand (review W9,
+#' 2026-11-15). This is the single copy. It is a pure pipe: callers keep their
+#' own empty-input checks, error handling and `.record_pbp_model_stamps()`.
+#'
+#' @param chains Possession chains (`load_chains()` / `get_match_chains()`).
+#' @param stamp Add `pbp_model_id` via [.stamp_pbp_models()]. `TRUE` for
+#'   anything published; [get_player_game_ratings()] passes `FALSE`.
+#' @return Scored play-by-play.
+#' @keywords internal
+.score_pbp <- function(chains, stamp = TRUE) {
+  pbp <- chains |>
+    clean_pbp() |>
+    clean_model_data_epv() |>
+    clean_shots_data() |>
+    add_shot_vars() |>
+    add_epv_vars() |>
+    clean_model_data_wp() |>
+    add_wp_vars()
+  if (isTRUE(stamp)) pbp <- .stamp_pbp_models(pbp)
+  pbp
+}
+
 #' Stamp play-by-play rows with the models that scored them
 #'
 #' @param pbp Play-by-play just built by `add_epv_vars()` / `add_wp_vars()`.
