@@ -5,7 +5,7 @@
 \alias{.NP_PLAY_TYPE_FAMILY}
 \title{Which game-logs column each Net Points play type adds into}
 \format{
-An object of class \code{character} of length 27.
+An object of class \code{character} of length 28.
 }
 \usage{
 .NP_PLAY_TYPE_FAMILY

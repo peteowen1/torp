@@ -466,6 +466,7 @@ role_label <- function(role, kind, next_desc) {
     role == "stoppage_player", "stoppage_player",
     role == "stoppage_ruck", "stoppage_ruck",
     role == "tackle", "tackle",
+    role == "contest_loser", "contest_loser",
     default = "other"
   )
 }
@@ -506,6 +507,7 @@ build_charged <- function(pg, rows) {
     role == "stoppage_ruck", "Ruck",
     role == "pressure_back", "Passed it to him under pressure",
     role == "tackle", "Tackled (chains)",
+    role == "contest_loser", "Beaten in the contest",
     default = esc(role)
   )]
   # short tag for the footnote line when a player carries >1 role on a row
@@ -521,6 +523,7 @@ build_charged <- function(pg, rows) {
     role == "stoppage_ruck", "ruck",
     role == "pressure_back", "the pass that led to it",
     role == "tackle", "tackle",
+    role == "contest_loser", "beaten in the contest",
     default = gsub("_", " ", role)
   )]
 

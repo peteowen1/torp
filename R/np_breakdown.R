@@ -14,7 +14,7 @@
 .np_play_type <- function(role, d) {
   known_roles <- c("actor", "receiver", "contest_winner", "ball_winner",
                    "error_blame", "pressure_back", "stoppage_ruck",
-                   "stoppage_player", "tackle")
+                   "stoppage_player", "tackle", "contest_loser")
   bad <- setdiff(unique(role), known_roles)
   if (length(bad) > 0L) {
     cli::cli_abort(c(
@@ -49,6 +49,8 @@
     role == "stoppage_player",                        "First possession: boundary throw-in",
     # a chains tackle paid from his side's pool (NP_TACKLE_*_SHARE, off by default)
     role == "tackle",                                 "Tackling (chains)",
+    # the kicker's debit for a contest his target lost (NP_NAMED_LOSER_SHARE)
+    role == "contest_loser",                          "Beaten in a contest",
     default = "Other own act")
 }
 
@@ -86,6 +88,7 @@
   "Marking (uncontested)"                  = "np_recv",
   "Marking (contested)"                    = "np_recv",
   "Charged for an error"                   = "np_recv",
+  "Beaten in a contest"                    = "np_recv",
   "Winning a contest (mark/spoil)"         = "np_contest",
   "Winning a loose/ground ball"            = "np_contest",
   "Winning the ball off a disposal"        = "np_contest",

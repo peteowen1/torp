@@ -2144,6 +2144,17 @@ NP_TACKLE_POOL_SHARE <- 0
 #' @keywords internal
 NP_TACKLE_STOPPAGE_SHARE <- 0
 
+#' Share of a lost contest kick's debit charged to the beaten target
+#'
+#' Test-version flag, 0 (off) by default (Pete 2026-09-11, "charge the beaten
+#' target instead of the kicker"; 2026-11-12, "build as a gated arm"). When a
+#' kick is lost at a contest the defence won and chains names the kick's
+#' target, a team-mate of the kicker, this share of the kicker's turnover debit
+#' moves to that target. Never on a turnover \code{NP_ERROR_BLAME_SHARE} already
+#' moved. Moves the recipient, never the amount. 1 is the decided value when on.
+#' @keywords internal
+NP_NAMED_LOSER_SHARE <- 0
+
 #' A quarter's last act is nobody's loss: its evaporated state goes to the pool
 #'
 #' `delta_epv` is built within (match, period), so the last row of a quarter
