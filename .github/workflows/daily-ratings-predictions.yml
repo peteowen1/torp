@@ -57,7 +57,66 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Off-season gate (review W6, finding 3.1). The four crons above fire all
+  # year; between seasons each run spent ~19 minutes retraining and
+  # re-uploading numbers that could not change. On SCHEDULED runs only, this
+  # job asks data-raw/02-models/offseason_gate.R whether any match starts in
+  # the next 14 days or finished after the last ratings upload; if neither,
+  # both jobs below are skipped. Manual and repository_dispatch runs pass
+  # straight through, and anything the gate cannot establish (an error, an
+  # unreadable fixture list) resolves to RUN. The crons themselves stay as
+  # they are: the pre-game schedule is load-bearing (torp/CLAUDE.md).
+  offseason-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      skip: ${{ steps.gate.outputs.skip || 'false' }}
+    steps:
+      - name: Checkout repository
+        if: github.event_name == 'schedule'
+        uses: actions/checkout@v7
+
+      - name: Setup R
+        if: github.event_name == 'schedule'
+        uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: '4.4.0'
+          use-public-rspm: true
+
+      - name: Setup R dependencies
+        if: github.event_name == 'schedule'
+        uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          cache-version: 3
+          extra-packages: |
+            any::devtools
+            any::piggyback
+
+            any::tictoc
+            any::mgcv
+            any::cli
+            any::glue
+            any::data.table
+            any::janitor
+            any::lubridate
+            any::here
+          needs: |
+            devtools
+
+      - name: Anything to do?
+        id: gate
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          up=$(gh release view ratings-data --repo peteowen1/torpdata --json assets                  --jq '.assets[] | select(.name == "torp_ratings.parquet") | .updatedAt') || up=""
+          RATINGS_UPDATED_AT="$up" Rscript data-raw/02-models/offseason_gate.R
+
   compute-ratings:
+    needs: offseason-gate
+    # !cancelled(): a FAILED gate still runs the pipeline (fail open); only an
+    # explicit skip=true stops it.
+    if: ${{ !cancelled() && needs.offseason-gate.outputs.skip != 'true' }}
     runs-on: ubuntu-latest
     # 45 was too tight: in Oct 2026 about 1 run in 3 was cancelled at the cap
     # (e.g. run 40115631541, 'Compute TORP ratings' still running at 45m), and
@@ -166,6 +225,11 @@ jobs:
 
   build-predictions:
     needs: compute-ratings
+    # Explicit, not the default success(): that also fails on a failed
+    # ANCESTOR, so a crashed off-season gate (which fails open, running the
+    # ratings) would otherwise skip predictions. Same rule as before the gate:
+    # run when compute-ratings succeeded.
+    if: ${{ !cancelled() && needs.compute-ratings.result == 'success' }}
     runs-on: ubuntu-latest
     # 30 was too tight: on 2026-07-29 a cold r-lib dependency cache spent ~30
     # min compiling packages, leaving ~3 min for the pipeline. The job printed
