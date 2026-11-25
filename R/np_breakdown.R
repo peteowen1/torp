@@ -14,7 +14,7 @@
 .np_play_type <- function(role, d) {
   known_roles <- c("actor", "receiver", "contest_winner", "ball_winner",
                    "error_blame", "pressure_back", "stoppage_ruck",
-                   "stoppage_player")
+                   "stoppage_player", "tackle")
   bad <- setdiff(unique(role), known_roles)
   if (length(bad) > 0L) {
     cli::cli_abort(c(
@@ -47,6 +47,8 @@
     role == "stoppage_player" & d == "Centre Bounce", "First possession: centre bounce",
     role == "stoppage_player" & d == "Ball Up Call",  "First possession: ball-up",
     role == "stoppage_player",                        "First possession: boundary throw-in",
+    # a chains tackle paid from his side's pool (NP_TACKLE_*_SHARE, off by default)
+    role == "tackle",                                 "Tackling (chains)",
     default = "Other own act")
 }
 
@@ -93,6 +95,7 @@
   "First possession: centre bounce"        = "np_contest",
   "First possession: ball-up"              = "np_contest",
   "First possession: boundary throw-in"    = "np_contest",
+  "Tackling (chains)"                      = "np_contest",
   "Team pool share"                        = "np_team",
   "Anchor to the real margin"              = "np_team",
   "Re-spread from a team-mate with no act" = "np_team"
