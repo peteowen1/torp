@@ -636,6 +636,8 @@
     xelo_diff = unname(elo_vec[persp$self] - elo_vec[persp$opp]),
     stringsAsFactors = FALSE
   )
+  # Same roof rule as training (.build_team_mdl_df(), MATCH_ROOF_ZERO_WEATHER).
+  if (isTRUE(MATCH_ROOF_ZERO_WEATHER)) df <- .roof_zero_weather(df)
 
   for (col in rating_cols) {
     df[[paste0(col, ".x")]] <- unname(rating_vec[[col]][persp$self])

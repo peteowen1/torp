@@ -14,8 +14,9 @@ MATCH_ROOF_ZERO_WEATHER
 Test-version flag, off by default (2026-11-15 full review, finding 1.4 /
 W12). The weather file holds the outside weather at the stadium, so a
 Docklands game (\code{is_roof}) can carry rain and wind the players never
-saw. \code{TRUE} sets \code{wind_avg} and \code{precipitation_total} to 0
-on roofed rows before the model features are built. Decided on the rolling
-gate; Pete chooses.
+saw. \code{TRUE} sets the model features \code{log_wind} and
+\code{log_precip} to 0 on roofed rows, in training (\code{.build_team_mdl_df()})
+and in the matchup table alike; \code{wind_avg} / \code{precipitation_total}
+stay as recorded (display only). Decided on the rolling gate; Pete chooses.
 }
 \keyword{internal}
