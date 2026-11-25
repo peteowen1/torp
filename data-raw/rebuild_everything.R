@@ -17,6 +17,21 @@
 #   --skip-models     Skip Phase 4 (model training)
 #   --skip-skills     Skip Phase 7 (stat ratings pipeline)
 #   --skip-sim        Skip Phase 10 (simulation)
+#   --skip-derived    Skip Phase 6 (xG, player_game, EP/WP chart data)
+#   --skip-ratings    Skip Phase 8 (TORP ratings, per-game ratings with PSV, PSR)
+#   --skip-predictions Skip Phase 9 (match predictions)
+#
+#   When Phases 2 and 3 both run, PBP is scored from the chains fetched in
+#   Phase 2 itself; Phase 3 reads chains from the release only for seasons
+#   Phase 2 did not fetch.
+#
+#   # Data-only rebuild (what rebuild_all_release_data.R did before it was folded
+#   # in here on 2026-11-26): API + chains + PBP + derived + ratings, no models,
+#   # stat-ratings scripts, predictions or simulation
+#   --skip-models --skip-skills --skip-predictions --skip-sim
+#   With a season range (e.g. 2026 2026), Phase 8 upserts only those seasons'
+#   ratings; the full 2021-current range replaces torp_ratings whole. Phase 8
+#   still publishes team_ratings and AFLW PSR, as the nightly ratings run does.
 #
 #   # Phase flags (only)
 #   --models-only     Only Phase 4 (train + upload models)
@@ -113,8 +128,11 @@ skip_pbp    <- "--skip-pbp" %in% flag_args
 skip_models <- "--skip-models" %in% flag_args
 skip_skills <- "--skip-skills" %in% flag_args
 skip_sim    <- "--skip-sim" %in% flag_args
+skip_derived     <- "--skip-derived" %in% flag_args
+skip_ratings     <- "--skip-ratings" %in% flag_args
+skip_predictions <- "--skip-predictions" %in% flag_args
 
-models_only      <- "--models-only" %in% flag_args
+models_only     <- "--models-only" %in% flag_args
 ratings_only     <- "--ratings-only" %in% flag_args
 predictions_only <- "--predictions-only" %in% flag_args
 data_only        <- "--data-only" %in% flag_args  # Phases 1-3 only: re-scrape + PBP, then stop
@@ -141,7 +159,7 @@ if (data_only) {
   # deliberately NOT recomputing models/derived/ratings/predictions, so a
   # coordinate re-scrape can be verified before any retrain (see BACKFILL-PLAN.md).
   # Pin start_from = 1 so Phases 1-3 actually run non-interactively (the default
-  # is 6, and start_from is otherwise only lowerable via the interactive prompt).
+  # is 1 outside the interactive prompt, but a START_FROM in the global env raises it).
   start_from <- 1L
   skip_models <- TRUE; skip_skills <- TRUE; skip_sim <- TRUE
 }
@@ -160,10 +178,10 @@ run_api         <- !skip_api && !models_only && !ratings_only && !predictions_on
 run_chains      <- !skip_chains && !models_only && !ratings_only && !predictions_only
 run_pbp         <- !skip_pbp && !models_only && !ratings_only && !predictions_only
 run_models      <- !skip_models && !ratings_only && !predictions_only
-run_derived     <- !models_only && !predictions_only && !data_only && start_from <= 6
+run_derived     <- !skip_derived && !models_only && !predictions_only && !data_only && start_from <= 6
 run_skills      <- !skip_skills && !models_only && !predictions_only
-run_ratings     <- !models_only && !predictions_only && !data_only && start_from <= 8
-run_predictions <- !models_only && !data_only && start_from <= 9
+run_ratings     <- !skip_ratings && !models_only && !predictions_only && !data_only && start_from <= 8
+run_predictions <- !skip_predictions && !models_only && !data_only && start_from <= 9
 run_sim         <- !skip_sim && !models_only && !ratings_only && !predictions_only
 
 # Season range
@@ -231,6 +249,10 @@ safe_run <- function(label, expr) {
 
 failure_log_path <- file.path(torp_root, "data-raw", "rebuild_failures.csv")
 
+# Seasons whose PBP Phase 2 already scored from freshly fetched chains.
+# (safe_run() evaluates its block in this top-level frame, so `<-` inside it lands here.)
+pbp_scored_fresh <- integer(0)
+
 # Phase 1: API Data ----
 
 if (run_api) {
@@ -258,9 +280,9 @@ if (run_api) {
 
     safe_run(paste0("player_stats_", season), {
       pstats <- get_afl_player_stats(season) |>
-        dplyr::select(where(~ dplyr::n_distinct(.) > 1)) |>
         janitor::clean_names()
       pstats <- .normalise_player_stats_columns(pstats)
+      pstats <- .drop_unpublished_player_stats_columns(pstats)  # A318
       if (!"season" %in% names(pstats)) pstats$season <- as.integer(season)
       save_to_release(pstats, paste0("player_stats_", season), "player_stats-data")
       cli::cli_inform("  player_stats_{season}: {nrow(pstats)} rows")
@@ -317,6 +339,20 @@ if (run_chains) {
       cli::cli_inform("  chains_{season}: {nrow(chains)} rows")
     })
 
+    # Score PBP from the chains just fetched (Pete, 2026-11-26, W9 fold), not a
+    # re-read of the release: a failed or lagging chains upload would otherwise
+    # score last vintage's chains with nothing saying so. Phase 3 skips these.
+    if (run_pbp) {
+      safe_run(paste0("pbp_data_", season, "_all"), {
+        pbp <- .score_pbp(chains)
+        save_to_release(pbp, paste0("pbp_data_", season, "_all"), "pbp-data")
+        .record_pbp_model_stamps(season, pbp)
+        cli::cli_inform("  pbp_{season} (from fresh chains): {nrow(pbp)} rows")
+        pbp_scored_fresh <- c(pbp_scored_fresh, season)
+        rm(pbp)
+      })
+    }
+
     toc(log = TRUE)
     rm(all_chains, chains)
     gc()
@@ -333,6 +369,10 @@ if (run_pbp) {
 
   for (season in seasons) {
     cli::cli_h2("Season {season}")
+    if (season %in% pbp_scored_fresh) {
+      cli::cli_alert_info("  pbp_{season} already scored from fresh chains in Phase 2")
+      next
+    }
 
     safe_run(paste0("pbp_data_", season, "_all"), {
       chains <- load_chains(seasons = season, rounds = TRUE)
@@ -527,16 +567,36 @@ if (run_ratings) {
   tic("phase_8_ratings")
 
   # Set config in global env (run_ratings_pipeline.R checks .GlobalEnv)
-  SEASONS <<- TRUE
+  # The season range is honoured (it used to be SEASONS <<- TRUE, ignoring it).
+  # The full range replaces torp_ratings whole; a partial range upserts only
+  # those seasons through the pipeline's incremental path.
+  full_range <- identical(as.integer(seasons), 2021L:as.integer(get_afl_season()))
+  SEASONS <<- if (full_range) TRUE else seasons
   REFRESH_UPSTREAM <<- FALSE  # Phase 1 already handled this
   REBUILD_PLAYER_GAME <<- TRUE  # Phase 6 might have already handled this but set as TRUE to be safe
-  REBUILD_ALL_RATINGS <<- TRUE
+  REBUILD_ALL_RATINGS <<- full_range
 
   ratings_script <- file.path(torp_root, "data-raw", "03-ratings", "run_ratings_pipeline.R")
   if (file.exists(ratings_script)) {
     safe_run("torp_ratings_pipeline", {
       source(ratings_script)
     })
+    # The pipeline catches per-season failures itself and only prints them, so
+    # copy them into this run's failure log (it would otherwise end "All phases
+    # completed successfully!" with seasons unwritten).
+    for (v in c("stage2_failed_seasons", "failed_seasons", "stage5_failed_seasons")) {
+      fs <- if (exists(v, envir = .GlobalEnv, inherits = FALSE)) get(v, envir = .GlobalEnv) else character()
+      for (s in fs) {
+        failures <- rbind(failures, data.frame(
+          label = paste0("ratings_", v, "_", s), error = "see the ratings pipeline log above",
+          time = format(Sys.time(), "%Y-%m-%d %H:%M:%S"), stringsAsFactors = FALSE))
+      }
+    }
+    if (isTRUE(get0("stage6_failed", envir = .GlobalEnv, inherits = FALSE))) {
+      failures <- rbind(failures, data.frame(
+        label = "ratings_stage6_psr", error = "PSR compute/release failed; see the log above",
+        time = format(Sys.time(), "%Y-%m-%d %H:%M:%S"), stringsAsFactors = FALSE))
+    }
   } else {
     cli::cli_alert_danger("Ratings pipeline script not found at {ratings_script}")
   }

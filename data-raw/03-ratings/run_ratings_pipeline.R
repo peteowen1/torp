@@ -705,6 +705,7 @@ tictoc::toc(log = TRUE)
 cli::cli_h2("Stage 6: Compute & Release PSR")
 tictoc::tic("stage_6_psr")
 
+stage6_failed <- FALSE  # read by rebuild_everything.R Phase 8's failure log
 tryCatch({
   stat_ratings <- load_player_stat_ratings(TRUE)
   psr_coef_path <- file.path("data-raw", "cache-stat-ratings", "psr_coefficients.csv")
@@ -731,6 +732,7 @@ tryCatch({
     cli::cli_warn("PSR coefficient file not found - skipping PSR release")
   }
 }, error = function(e) {
+  stage6_failed <<- TRUE
   cli::cli_alert_danger("Failed to compute/release PSR: {conditionMessage(e)}")
 })
 
