@@ -552,7 +552,8 @@
   s <- s[.grp > 0]
   owner <- s[in_pbp == TRUE, .(match_id, .grp, display_order,
                                act_pid = player_id, act_team = team)]
-  errs <- s[in_pbp == FALSE & description %chin% NP_ERROR_DESCS &
+  err_descs <- c(NP_ERROR_DESCS, if (isTRUE(NP_FREE_AGAINST_BLAME)) "Free Against")
+  errs <- s[in_pbp == FALSE & description %chin% err_descs &
               !is.na(player_id),
             .(match_id, .grp, err_pid = player_id, err_team = team,
               err_desc = description, err_do = display_order)]
@@ -564,6 +565,35 @@
            !is.na(act_team) & !is.na(err_team) & err_team == act_team]
   if (!nrow(o)) return(empty)
   o[, .(match_id, display_order, err_pid, err_desc)]
+}
+
+#' Chains-only tackles, tied to the PBP act they follow
+#'
+#' Same grouping as [.np_error_actor()]: each chains-only row belongs to the
+#' last PBP act before it. Returns the first "Tackle" in each group, with the
+#' tackler's id and team, so the payments stage can pay him a share of his
+#' side's pool on that act (`NP_TACKLE_POOL_SHARE`, `NP_TACKLE_STOPPAGE_SHARE`).
+#' @param seq Output of `.np_sequence()`, the full sequence.
+#' @return `match_id`, `display_order`, `tackle_pid`, `tackle_team`.
+#' @keywords internal
+.np_tackle_actor <- function(seq) {
+  empty <- data.table::data.table(match_id = character(), display_order = integer(),
+                                  tackle_pid = character(), tackle_team = character())
+  if (is.null(seq) || !nrow(seq) || !"in_pbp" %in% names(seq)) return(empty)
+  s <- data.table::as.data.table(seq)[, .(match_id = as.character(match_id),
+                                          display_order, description, player_id,
+                                          team, in_pbp)]
+  data.table::setorder(s, match_id, display_order)
+  s[, .grp := cumsum(in_pbp), by = match_id]
+  s <- s[.grp > 0]
+  owner <- s[in_pbp == TRUE, .(match_id, .grp, display_order)]
+  tk <- s[in_pbp == FALSE & description == "Tackle" & !is.na(player_id) & !is.na(team),
+          .(match_id, .grp, tackle_pid = player_id, tackle_team = team, t_do = display_order)]
+  if (!nrow(tk)) return(empty)
+  data.table::setorder(tk, match_id, .grp, t_do)
+  tk <- tk[, .SD[1L], by = .(match_id, .grp)]
+  o <- merge(owner, tk, by = c("match_id", ".grp"))
+  o[, .(match_id, display_order, tackle_pid, tackle_team)]
 }
 
 #' Build the per-act ledger in the home-margin frame
@@ -782,6 +812,11 @@
   data.table::setattr(out, "np_roster",
                       unique(seq[!is.na(team) & !is.na(player_id),
                                  .(match_id, team, player_id)]))
+  # Chains-only tackles for the payments stage (NP_TACKLE_*_SHARE); only
+  # computed when one of those shares is on, so the default path is untouched.
+  if (!is.null(chains) && (NP_TACKLE_POOL_SHARE > 0 || NP_TACKLE_STOPPAGE_SHARE > 0)) {
+    data.table::setattr(out, "np_tackles", .np_tackle_actor(seq))
+  }
   # The baseline the stoppages were priced on, fitted here or supplied, so the
   # nightly can save its season fit for the live path to reuse (torp#250).
   if (identical(stoppages, "allocate")) {
@@ -2341,6 +2376,29 @@ build_net_points <- function(pbp_data = NULL,
     if (!is.null(sc$rows)) pay <- c(pay, list(sc$rows))
     pay <- data.table::rbindlist(pay, use.names = TRUE)
     pay[, doubled := FALSE]
+    # Chains tackles (Pete, 2026-11-25; plan NP-FREE-AGAINST-AND-TACKLES.md):
+    # a share of the tackler's OWN side's pool on the act his tackle follows
+    # is paid to him by name -- the defence pool when his side won the ball
+    # there, the stoppage pool when it was a stoppage. No such pool row means
+    # nothing is paid. Moves the recipient, never the amount.
+    tk <- attr(led, "np_tackles")
+    if (!is.null(tk) && nrow(tk)) {
+      for (spec in list(list(role = "defence_pool", share = NP_TACKLE_POOL_SHARE),
+                        list(role = "stoppage_pool", share = NP_TACKLE_STOPPAGE_SHARE))) {
+        sh <- spec$share
+        if (!is.numeric(sh) || length(sh) != 1 || is.na(sh) || sh < 0 || sh > 1) {
+          cli::cli_abort("Tackle pool shares must be one number in [0, 1], not {.val {sh}}.")
+        }
+        if (sh == 0) next
+        hit <- pay[tk, on = .(match_id, display_order, team = tackle_team), nomatch = NULL][role == spec$role & is.na(player_id)]
+        if (!nrow(hit)) next
+        moved <- hit[, .(match_id, display_order, role = "tackle", team, player_id = tackle_pid,
+                         hm = hm * sh, doubled = FALSE)]
+        pay[hit, on = .(match_id, display_order, team, role), hm := hm * (1 - sh)]
+        pay <- data.table::rbindlist(list(pay, moved), use.names = TRUE)
+        cli::cli_alert_info("Tackles: {nrow(moved)} chains tackle{?s} take {round(100 * sh)}% of their side's {spec$role} ({round(sum(abs(moved$hm)), 2)} points moved)")
+      }
+    }
     if (any(has_err)) {
       moved <- sum(abs(l$own_hm[has_err])) * eb
       cli::cli_alert_info(
