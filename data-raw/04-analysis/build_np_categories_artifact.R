@@ -86,6 +86,7 @@ lab <- function(role, d) {
     role == "stoppage_player" & d == "Centre Bounce", "First possession: centre bounce",
     role == "stoppage_player" & d == "Ball Up Call",  "First possession: ball-up",
     role == "stoppage_player",                        "First possession: boundary throw-in",
+    role == "tackle",                                 "Tackling (chains)",
     default = "Other own act")
 }
 p[, cat := lab(role, description)]
