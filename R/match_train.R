@@ -90,7 +90,39 @@
   model$gcv.ubre <- NULL
   if (!is.null(model$family$data)) model$family$data <- NULL
   attr(model, "predict.gam.env") <- NULL
-  model
+  # bam(discrete = TRUE) keeps formulas in dinfo$gp (and elsewhere) whose
+  # environment is the training function's frame, so saveRDS() wrote the
+  # whole training frame with each model: match_gams.rds was 66 MB, each of
+  # its five GAMs ~145 MB serialized. Predictions need none of it (variables
+  # come from newdata). Same fix as torpmodels' fit_shot() (review W14).
+  .reset_formula_envs(model)
+}
+
+#' Repoint every formula / terms environment inside a fitted model
+#'
+#' A formula built inside a function carries that function's frame, and
+#' `saveRDS()` then serializes every object in it. Namespaces and `env` are
+#' left alone; list attributes (class, names) are kept; a model frame's
+#' `terms` attribute is reset too. Copy of torpmodels'
+#' `data-raw/lib/train_lib.R` `reset_formula_envs()`.
+#'
+#' @param x A fitted model, or any list / formula.
+#' @param env Environment to point at. Default the global environment.
+#' @return `x` with its formula environments repointed.
+#' @keywords internal
+.reset_formula_envs <- function(x, env = globalenv()) {
+  if (inherits(x, "formula") || inherits(x, "terms")) {
+    e <- environment(x)
+    if (!is.null(e) && !identical(e, env) && !isNamespace(e)) environment(x) <- env
+    return(x)
+  }
+  if (is.list(x) && !is.data.frame(x)) {
+    a <- attributes(x)
+    for (i in seq_along(x)) if (!is.null(x[[i]])) x[[i]] <- .reset_formula_envs(x[[i]], env)
+    attributes(x) <- a
+  }
+  if (!is.null(attr(x, "terms"))) attr(x, "terms") <- .reset_formula_envs(attr(x, "terms"), env)
+  x
 }
 
 #' Strip a list of GAM models for compact serialisation

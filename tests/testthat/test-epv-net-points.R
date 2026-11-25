@@ -1618,3 +1618,7 @@ test_that("NP_FREE_AGAINST_BLAME routes a teammate's Free Against through the er
   expect_equal(e$display_order, 1L)
   expect_equal(e$err_desc, "Free Against")
 })
+
+test_that("NP_NAMED_LOSER_SHARE is off by default (flag-on path proven on real matches, commit 15d6c30a)", {
+  expect_identical(torp:::NP_NAMED_LOSER_SHARE, 0)
+})

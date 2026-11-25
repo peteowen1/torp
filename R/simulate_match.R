@@ -63,7 +63,7 @@ simulate_match_mc <- function(home_team, away_team,
   away_conv <- match_params$away_conv
 
   # Pre-game WP from logistic
-  pre_game_wp <- 1 / (10^(-estimate / SIM_WP_SCALING_FACTOR) + 1)
+  pre_game_wp <- .wp_from_margin(estimate)
 
   cli::cli_inform(
     "Simulating {home_team} vs {away_team} ({n_sims} sims, est={round(estimate, 1)}, WP={round(pre_game_wp * 100, 1)}%)"
@@ -491,7 +491,7 @@ simulate_match_mc <- function(home_team, away_team,
     fm <- final_margins$final_margin
     blended <- t * current_margins + (1 - t) * (fm * 0.3)
     effective <- blended * (1 + sqrt(t))
-    wp_matrix[, t_idx] <- 1 / (10^(-effective / SIM_WP_SCALING_FACTOR) + 1)
+    wp_matrix[, t_idx] <- .wp_from_margin(effective)
   }
 
   data.table::data.table(

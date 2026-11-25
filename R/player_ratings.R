@@ -308,7 +308,7 @@ calculate_epr_stats <- function(player_game_data = NULL, match_ref, date_val, de
   # rates. We convert back to game totals (* tog) so the shrinkage denominator
   # is in weighted minutes (wt * tog), not weighted games. This ensures low-TOG
   # games (noisier rates) contribute proportionally less to the posterior.
-  dt[, tog_safe := pmax(data.table::fifelse(is.na(time_on_ground_percentage), 100, time_on_ground_percentage) / 100, 0.1)]
+  dt[, tog_safe := .tog_weight(time_on_ground_percentage)]
   result <- dt[, .(
     player_name = max(player_name),
     gms = .N,
@@ -442,7 +442,7 @@ calculate_epr_stats_batch <- function(player_game_data = NULL,
   }
   # Aggregate by (round_val, player_id) — all rounds in one pass
   # Weight by TOG so low-TOG games contribute proportionally less
-  cross[, tog_safe := pmax(data.table::fifelse(is.na(time_on_ground_percentage), 100, time_on_ground_percentage) / 100, 0.1)]
+  cross[, tog_safe := .tog_weight(time_on_ground_percentage)]
   result <- cross[, .(
     player_name = max(player_name),
     gms = .N,

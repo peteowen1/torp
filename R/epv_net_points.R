@@ -990,7 +990,7 @@
                     decision, surprise)]
   out[, `:=`(contested = FALSE, cont_desc = NA_character_,
              cont_surprise = NA_real_, ground_surprise = NA_real_,
-             def_win = NA, winner_pid = NA_character_)]
+             def_win = NA, winner_pid = NA_character_, target_pid = NA_character_)]
 
   # --- the contest branch (D8) ------------------------------------------------
   # A kick that resolves at a contest is split once more: the contest surprise
@@ -1059,7 +1059,8 @@
     ct <- csc[, .(match_id = as.character(match_id), display_order = kick_do,
                   c_p = p_hat, c_decision = V_pre - exp_pts,
                   c_cont = V_branch - V_pre, c_ground = V_after - V_branch,
-                  c_desc = out_desc, c_def_win = def_win, c_winner = out_pid)]
+                  c_desc = out_desc, c_def_win = def_win, c_winner = out_pid,
+                  c_target = if ("target_pid" %in% names(csc)) as.character(target_pid) else NA_character_)]
     n_new <- nrow(ct[!out, on = .(match_id, display_order)])
     if (anyDuplicated(ct, by = c("match_id", "display_order")) > 0L) {
       cli::cli_abort("Aerial contests are not unique per (match_id, display_order); merging them would duplicate ledger rows.")
@@ -1070,9 +1071,9 @@
                   surprise = c_cont + c_ground, contested = TRUE,
                   cont_desc = c_desc, cont_surprise = c_cont,
                   ground_surprise = c_ground, def_win = c_def_win,
-                  winner_pid = c_winner)]
+                  winner_pid = c_winner, target_pid = c_target)]
     out[, c("c_p", "c_decision", "c_cont", "c_ground", "c_desc", "c_def_win",
-            "c_winner") := NULL]
+            "c_winner", "c_target") := NULL]
     cli::cli_alert_info(
       "Contest terms: {format(sum(hit), big.mark = ',')} kicks resolve at a fought contest ({format(n_new, big.mark = ',')} not scorable as plain disposals); defence won {round(100 * mean(out$def_win[hit]), 1)}%; mean |contest surprise| {round(mean(abs(out$cont_surprise[hit])), 3)}, mean |ground surprise| {round(mean(abs(out$ground_surprise[hit])), 3)}")
   }
@@ -1178,7 +1179,8 @@
            team_hm = 0,
            cede_hm = data.table::fifelse(kind == "turnover", hm * phi, 0),
            cede_c_hm = 0, stop_hm = 0,
-           winner_pid = NA_character_, cont_desc = NA_character_)]
+           winner_pid = NA_character_, cont_desc = NA_character_,
+           target_pid = NA_character_)]
   # a stoppage row is paid by .np_stoppage_credit(), not by any rule below
   l[kind == "stoppage", `:=`(own_hm = 0, recv_hm = 0, cede_hm = 0, stop_hm = hm)]
 
@@ -1188,22 +1190,24 @@
     }
     t <- data.table::as.data.table(terms)
     for (v in c("contested", "cont_desc", "cont_surprise", "ground_surprise",
-                "def_win", "winner_pid")) {
+                "def_win", "winner_pid", "target_pid")) {
       if (!v %in% names(t)) {
         data.table::set(t, j = v, value = switch(v, contested = FALSE,
                                                  def_win = NA,
                                                  cont_desc = NA_character_,
                                                  winner_pid = NA_character_,
+                                                 target_pid = NA_character_,
                                                  NA_real_))
       }
     }
     t <- t[, .(match_id = as.character(match_id), display_order, p_hat, decision,
                surprise, contested, cont_desc, cont_surprise, ground_surprise,
-               def_win, winner_pid)]
+               def_win, winner_pid, target_pid)]
     l[t, on = .(match_id, display_order),
       `:=`(p_hat = i.p_hat, dec = i.decision, sur = i.surprise,
            contested = i.contested, cont_desc = i.cont_desc, csur = i.cont_surprise,
-           gsur = i.ground_surprise, def_win = i.def_win, winner_pid = i.winner_pid)]
+           gsur = i.ground_surprise, def_win = i.def_win, winner_pid = i.winner_pid,
+           target_pid = i.target_pid)]
     l[is.na(contested), contested := FALSE]
     l[, sgn := data.table::fifelse(home_away == "Home", 1, -1)]
     l[, `:=`(dec_hm = dec * sgn, sur_hm = sur * sgn,
@@ -2355,9 +2359,32 @@ build_net_points <- function(pbp_data = NULL,
       !is.na(l$err_pid) & l$kind == "turnover" & l$own_hm != 0
     } else rep(FALSE, nrow(l))
     l[, .err_share := data.table::fifelse(has_err, eb, 0)]
+    # Named-loser blame (Pete 2026-09-11 / 11-12, NP_NAMED_LOSER_SHARE, 0 = off):
+    # a kick lost at a contest the defence won is charged to the TARGET who was
+    # beaten, not the kicker. Same mechanism as the error blame above (moves
+    # the recipient, never the amount) and never on a row that rule already
+    # moved. The target must be the kicker's team-mate on this match's roster.
+    nl <- NP_NAMED_LOSER_SHARE
+    if (!is.numeric(nl) || length(nl) != 1 || is.na(nl) || nl < 0 || nl > 1) {
+      cli::cli_abort("{.code NP_NAMED_LOSER_SHARE} must be one number in [0, 1], not {.val {nl}}.")
+    }
+    l[, .nl_share := 0]
+    if (nl > 0 && "target_pid" %in% names(l)) {
+      ros <- unique(roster[, .(match_id = as.character(match_id), nl_team = team, target_pid = player_id)])
+      l[ros, on = .(match_id, target_pid), .nl_team := i.nl_team]
+      has_nl <- !has_err & l$kind == "turnover" & l$own_hm != 0 & l$contested %in% TRUE &
+        l$def_win %in% TRUE & !is.na(l$target_pid) & l$target_pid != l$player_id &
+        !is.na(l$.nl_team) & l$.nl_team == l$team
+      l[has_nl, .nl_share := nl]
+      l[, .nl_team := NULL]
+      cli::cli_alert_info(
+        "Named-loser blame: {format(sum(has_nl), big.mark = ',')} kick{?s} lost at a contest move {round(100 * nl)}% of their debit ({round(sum(abs(l$own_hm[has_nl])) * nl, 1)} points) to the beaten target (NP_NAMED_LOSER_SHARE)")
+    }
     pay <- list(
       l[own_hm != 0, .(match_id, display_order, role = "actor", team, player_id,
-                       hm = own_hm * (1 - .err_share))],
+                       hm = own_hm * (1 - .err_share - .nl_share))],
+      l[.nl_share > 0, .(match_id, display_order, role = "contest_loser",
+                         team, player_id = target_pid, hm = own_hm * .nl_share)],
       l[has_err & .err_share > 0, .(match_id, display_order, role = "error_blame",
                                     team, player_id = err_pid, hm = own_hm * .err_share)],
       l[recv_hm != 0, .(match_id, display_order, role = "receiver", team, player_id = next_player, hm = recv_hm)],
@@ -2404,7 +2431,7 @@ build_net_points <- function(pbp_data = NULL,
       cli::cli_alert_info(
         "Error blame: {format(sum(has_err), big.mark = ',')} turnover{?s} follow a chains-only error by a teammate ({paste(sort(unique(stats::na.omit(l$err_desc[has_err]))), collapse = ', ')}); {round(100 * eb)}% of their debit ({round(moved, 1)} points) moves to the player who erred (NP_ERROR_BLAME_SHARE)")
     }
-    l[, .err_share := NULL]
+    l[, c(".err_share", ".nl_share") := NULL]
     paid <- sum(pay$hm); owed <- sum(l$hm)
     if (abs(paid - owed) > 1e-6) {
       cli::cli_abort("Payment table does not rebuild the ledger: paid {round(paid, 4)}, ledger {round(owed, 4)}.")

@@ -3,7 +3,7 @@
 
 test_that("every play type .np_play_type can return has a family", {
   roles <- c("actor", "receiver", "contest_winner", "ball_winner", "error_blame",
-             "pressure_back", "stoppage_ruck", "stoppage_player", "tackle")
+             "pressure_back", "stoppage_ruck", "stoppage_player", "tackle", "contest_loser")
   descs <- c("Kick", "Handball", "Ground Kick", "Bounce", "Free For", "Free For: In Possession",
              "Handball Received", "Loose Ball Get", "Hard Ball Get", "Crumb", "Gather",
              "Uncontested Mark", "Contested Mark", "Pack Mark", "Centre Bounce",

@@ -378,7 +378,7 @@ calculate_final_ladder <- function(season = get_afl_season(),
           games[unplayed_adj,
                 pred_margin := pred_margin + (home_boost - away_boost)]
           games[unplayed_adj,
-                pred_win := 1 / (10^(-pred_margin / SIM_WP_SCALING_FACTOR) + 1)]
+                pred_win := .wp_from_margin(pred_margin)]
 
           games[, c("home_boost", "away_boost") := NULL]
         }
