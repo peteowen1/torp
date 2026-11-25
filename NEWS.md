@@ -1,3 +1,7 @@
+# torp 1.11.8
+
+* `match_gams.rds` shrinks from 66 MB to 6 MB: `.strip_gam()` now resets the formula environments that `bam(discrete = TRUE)` kept pointing at the training frame (new internal `.reset_formula_envs()`). Predictions are identical. New test-version flags, both off by default: `NP_NAMED_LOSER_SHARE` (a kick lost at a contest charges the beaten target) and `MATCH_ROOF_ZERO_WEATHER` (no outside rain or wind under a closed roof). `ladder.R` and `simulate_match.R` use `.wp_from_margin()`, and `epv_opponent_adjustment.R` and `player_ratings.R` use `.tog_weight()`, with identical results. New gate script `data-raw/04-analysis/run_epr_gate_named_loser.R`. Published numbers are unchanged.
+
 # torp 1.11.7
 
 * Net points can charge a free kick given away to the player who gave it away, and credit a chains-recorded tackle from his side's pool, behind three new flags that are off by default: `NP_FREE_AGAINST_BLAME`, `NP_TACKLE_POOL_SHARE` and `NP_TACKLE_STOPPAGE_SHARE` (new `.np_tackle_actor()`; payment role `tackle`, labelled "Tackling (chains)"). Each moves who is paid, never the amount. Gated leak-free out of sample 2022-2026: neutral (log loss 0.56134 to 0.56133). They turn on with the v18 vintage. New gate script `data-raw/04-analysis/run_epr_gate_free_against_tackles.R`. Published numbers are unchanged.
