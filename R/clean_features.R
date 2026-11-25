@@ -445,8 +445,9 @@ filter_relevant_descriptions <- function(df) {
 
 # NOTE: Legacy dplyr-based mirror helpers (is_current_throw_in_team_change,
 # is_consecutive_throw_in_same_side, etc.) and calculate_mirror() were removed
-# in favour of the data.table implementation in add_epv_team_vars_dt() above,
-# which handles all 7 throw-in mirror conditions via fcase().
+# in favour of the data.table implementation in add_epv_team_vars_dt() above.
+# That implementation no longer applies them either: `mirror` is a constant 1
+# (see the `dt[, mirror := 1]` line and issue #92).
 
 #' Calculate Positive Lead Probability
 #'

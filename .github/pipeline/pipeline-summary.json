@@ -1,0 +1,630 @@
+{
+ "repo": "peteowen1/torp",
+ "doc_path": ".github/pipeline/PIPELINE.md",
+ "title": "torp CI pipeline",
+ "about": "What torp's daily GitHub Actions run does, in order, and how long each part takes: it recomputes the player and team ratings from the data torpdata has just released, publishes them, then builds and publishes the AFL match predictions. When it finishes it starts torpdata's Build blog data run, which puts the results on the site's data store. This guide lives in .github/pipeline/ because the repo's docs/ folder is ignored by git (it holds the pkgdown website build).",
+ "newest_run_utc": "2026-11-22T04:07:11Z",
+ "newest_run_sydney": "22 Nov 2026, 3:07pm",
+ "pipelines": [
+  {
+   "name": "Daily ratings and predictions",
+   "workflow": "daily-ratings-predictions.yml",
+   "about": "Three jobs one after the other: offseason-gate, compute-ratings, then build-predictions. The gate (merged to main 25 Nov 2026, torp#325) skips the two R jobs on scheduled runs when no match is near; each R job installs R first. Runs counted are successful ones on the main branch where both R jobs succeeded and the run took over 10 minutes, so they predate the gate, which is why it is listed below as optional.",
+   "triggers": "In practice the four weekly pre-game schedule runs, so predictions use the published team lists: Thursday and Friday at 5pm and Saturday and Sunday at 11am, Sydney summer time; all five runs counted here were schedule runs. Also started by torpdata's Daily Data Release, which sends the ratings-trigger event after a real data release (within hours of a match ending), and by hand with Run workflow (inputs: force, week_override, seasons). When build-predictions succeeds it sends the blog-trigger event to torpdata, which starts torpdata's Build blog data run (see torpdata's guide). The two runs are not stitched together here.",
+   "median_s": 1143.0,
+   "min_s": 1098.0,
+   "max_s": 1196.0,
+   "runs": [
+    {
+     "id": 44983620808,
+     "url": "https://github.com/peteowen1/torp/actions/runs/44983620808",
+     "event": "schedule",
+     "branch": "main",
+     "title": "Daily Ratings & Predictions",
+     "started_utc": "2026-11-22T04:07:11Z",
+     "started_sydney": "22 Nov 2026, 3:07pm",
+     "wall_s": 1143.0,
+     "queued_s": 3.0
+    },
+    {
+     "id": 44865661703,
+     "url": "https://github.com/peteowen1/torp/actions/runs/44865661703",
+     "event": "schedule",
+     "branch": "main",
+     "title": "Daily Ratings & Predictions",
+     "started_utc": "2026-11-21T04:20:58Z",
+     "started_sydney": "21 Nov 2026, 3:20pm",
+     "wall_s": 1161.0,
+     "queued_s": 2.0
+    },
+    {
+     "id": 44754544878,
+     "url": "https://github.com/peteowen1/torp/actions/runs/44754544878",
+     "event": "schedule",
+     "branch": "main",
+     "title": "Daily Ratings & Predictions",
+     "started_utc": "2026-11-20T14:33:12Z",
+     "started_sydney": "21 Nov 2026, 1:33am",
+     "wall_s": 1196.0,
+     "queued_s": 3.0
+    },
+    {
+     "id": 44555682545,
+     "url": "https://github.com/peteowen1/torp/actions/runs/44555682545",
+     "event": "schedule",
+     "branch": "main",
+     "title": "Daily Ratings & Predictions",
+     "started_utc": "2026-11-19T15:31:09Z",
+     "started_sydney": "20 Nov 2026, 2:31am",
+     "wall_s": 1133.0,
+     "queued_s": 2.0
+    },
+    {
+     "id": 43674313364,
+     "url": "https://github.com/peteowen1/torp/actions/runs/43674313364",
+     "event": "schedule",
+     "branch": "main",
+     "title": "Daily Ratings & Predictions",
+     "started_utc": "2026-11-15T03:53:00Z",
+     "started_sydney": "15 Nov 2026, 2:53pm",
+     "wall_s": 1098.0,
+     "queued_s": 2.0
+    }
+   ],
+   "jobs": [
+    {
+     "name": "compute-ratings",
+     "about": "Rebuilds the player stat ratings, then computes the TORP ratings (player game data, EPR, team ratings, player game and season ratings, PSR) and uploads them to the torpdata releases",
+     "legs": 1,
+     "median_s": 579.0,
+     "min_s": 490.0,
+     "max_s": 596.0,
+     "leg_median_s": 579.0,
+     "slowest_leg_median_s": 579.0,
+     "runs_seen": 5,
+     "steps": [
+      {
+       "name": "Set up job",
+       "about": "GitHub starts the machine and downloads the actions this job uses",
+       "source": "builtin",
+       "median_s": 1.0,
+       "min_s": 1.0,
+       "max_s": 3.0,
+       "n": 5,
+       "of": 5
+      },
+      {
+       "name": "Checkout repository",
+       "about": "Downloads this repo's code onto the machine",
+       "source": "builtin",
+       "median_s": 3.0,
+       "min_s": 3.0,
+       "max_s": 5.0,
+       "n": 5,
+       "of": 5
+      },
+      {
+       "name": "Setup R",
+       "about": "Installs R 4.4.0",
+       "source": "config",
+       "median_s": 39.0,
+       "min_s": 32.0,
+       "max_s": 49.0,
+       "n": 5,
+       "of": 5
+      },
+      {
+       "name": "Setup R dependencies",
+       "about": "Installs the R packages torp needs (from a cache when it can)",
+       "source": "config",
+       "median_s": 53.0,
+       "min_s": 35.0,
+       "max_s": 63.0,
+       "n": 5,
+       "of": 5
+      },
+      {
+       "name": "Rebuild stat ratings",
+       "about": "Runs three scripts in data-raw/06-stat-ratings/: collects every player's per-match stats and adjusts them for the opponent, estimates each player's stat ratings round by round, and uploads the stat ratings to the torpdata release (skipped when torpdata reports a team-only release)",
+       "source": "config",
+       "median_s": 139.0,
+       "min_s": 112.0,
+       "max_s": 141.0,
+       "n": 5,
+       "of": 5
+      },
+      {
+       "name": "Compute TORP ratings",
+       "about": "Runs data-raw/03-ratings/run_ratings_pipeline.R: player game data, EPR ratings for the current season, team ratings, player game and season ratings, then PSR for the men's and the women's (AFLW) competitions; each stage uploads to the torpdata releases (skipped when torpdata reports a team-only release)",
+       "source": "config",
+       "median_s": 334.0,
+       "min_s": 278.0,
+       "max_s": 337.0,
+       "n": 5,
+       "of": 5
+      },
+      {
+       "name": "Get release info",
+       "about": "Reads the current AFL season and round",
+       "source": "config",
+       "median_s": 4.0,
+       "min_s": 3.0,
+       "max_s": 6.0,
+       "n": 5,
+       "of": 5
+      },
+      {
+       "name": "Ratings summary",
+       "about": "Writes the date, season, round and what started the run to the run's summary page",
+       "source": "config",
+       "median_s": 0.0,
+       "min_s": 0.0,
+       "max_s": 0.0,
+       "n": 5,
+       "of": 5
+      },
+      {
+       "name": "Post Setup R dependencies",
+       "about": "Clean-up for an earlier step (saves caches, removes credentials)",
+       "source": "builtin",
+       "median_s": 4.0,
+       "min_s": 3.0,
+       "max_s": 5.0,
+       "n": 5,
+       "of": 5
+      },
+      {
+       "name": "Post Checkout repository",
+       "about": "Clean-up for an earlier step (saves caches, removes credentials)",
+       "source": "builtin",
+       "median_s": 1.0,
+       "min_s": 0.0,
+       "max_s": 1.0,
+       "n": 5,
+       "of": 5
+      },
+      {
+       "name": "Complete job",
+       "about": "GitHub closes the job and cleans up the machine",
+       "source": "builtin",
+       "median_s": 0.0,
+       "min_s": 0.0,
+       "max_s": 0.0,
+       "n": 5,
+       "of": 5
+      }
+     ],
+     "stages": {
+      "Rebuild stat ratings, in order": [
+       {
+        "name": "Loading data",
+        "median_s": 62.450683,
+        "min_s": 53.607243,
+        "max_s": 65.554067,
+        "n": 5
+       },
+       {
+        "name": "Preparing stat rating data",
+        "median_s": 1.095223,
+        "min_s": 0.999805,
+        "max_s": 1.13076,
+        "n": 5
+       },
+       {
+        "name": "Opponent-adjusting per-game stats",
+        "median_s": 24.041355,
+        "min_s": 16.781879,
+        "max_s": 26.895545,
+        "n": 5
+       },
+       {
+        "name": "Loading stat rating data",
+        "median_s": 1.879134,
+        "min_s": 0.952122,
+        "max_s": 2.060382,
+        "n": 5
+       },
+       {
+        "name": "Estimating stat ratings by round",
+        "median_s": 21.637298,
+        "min_s": 20.315173,
+        "max_s": 22.555462,
+        "n": 5
+       },
+       {
+        "name": "Combining results",
+        "median_s": 10.880663,
+        "min_s": 8.138817,
+        "max_s": 11.696648,
+        "n": 5
+       },
+       {
+        "name": "Loading computed stat ratings",
+        "median_s": 3.946566,
+        "min_s": 3.135834,
+        "max_s": 3.994834,
+        "n": 5
+       },
+       {
+        "name": "Exporting to torpdata",
+        "median_s": 6.486289,
+        "min_s": 5.149219,
+        "max_s": 8.677389,
+        "n": 5
+       }
+      ],
+      "Stages of run_ratings_pipeline.R": [
+       {
+        "name": "Stage 2: Build Player Game Data",
+        "median_s": 63.221722,
+        "min_s": 49.546172,
+        "max_s": 63.924741,
+        "n": 5
+       },
+       {
+        "name": "Stage 3: Compute EPR Ratings",
+        "median_s": 56.672115,
+        "min_s": 51.251087,
+        "max_s": 61.614771,
+        "n": 5
+       },
+       {
+        "name": "Stage 4: Compute Team Ratings",
+        "median_s": 9.40187,
+        "min_s": 7.846945,
+        "max_s": 10.325543,
+        "n": 5
+       },
+       {
+        "name": "Stage 5: Player Game & Season Ratings",
+        "median_s": 20.127806,
+        "min_s": 18.494464,
+        "max_s": 22.4397,
+        "n": 5
+       },
+       {
+        "name": "Stage 6: Compute & Release PSR",
+        "median_s": 51.671209,
+        "min_s": 42.788211,
+        "max_s": 52.604631,
+        "n": 5
+       },
+       {
+        "name": "Stage 7: Compute & Release AFLW PSR",
+        "median_s": 123.637587,
+        "min_s": 106.069526,
+        "max_s": 128.357718,
+        "n": 5
+       }
+      ]
+     },
+     "stage_notes": {
+      "Rebuild stat ratings, in order": "Each stage runs from its header line to the next one; the last runs to the end of the step.",
+      "Stages of run_ratings_pipeline.R": "Each stage runs from its header line to the next one; the last runs to the end of the step. Stage 1 (refresh upstream data) is switched off in this workflow."
+     },
+     "stage_about": {
+      "Loading data": "Loads the per-match player stats, rosters, fixtures and lineups from torpdata",
+      "Preparing stat rating data": "Builds one table of every player's stats for every match",
+      "Opponent-adjusting per-game stats": "Adjusts each game's stats for the opponent, using each player's rolling past profile",
+      "Loading stat rating data": "Reloads the prepared table for the rating step",
+      "Estimating stat ratings by round": "Estimates every player's stat ratings round by round",
+      "Combining results": "Joins the rounds' results into one table",
+      "Loading computed stat ratings": "Reloads the combined ratings for export",
+      "Exporting to torpdata": "Uploads the stat ratings to the player_stat_ratings-data release",
+      "Stage 2: Build Player Game Data": "Builds each player's per-match data from play-by-play, player stats and teams, and releases it",
+      "Stage 3: Compute EPR Ratings": "Computes the EPR ratings for the current season and releases them",
+      "Stage 4: Compute Team Ratings": "Computes the team ratings from the player ratings and releases them",
+      "Stage 5: Player Game & Season Ratings": "Builds the player game and player season ratings",
+      "Stage 6: Compute & Release PSR": "Computes PSR (player stat ratings) and releases it",
+      "Stage 7: Compute & Release AFLW PSR": "The same for the women's competition (AFLW); a failure here is reported but does not stop the run"
+     }
+    },
+    {
+     "name": "build-predictions",
+     "about": "Trains the match models, predicts the next round, publishes the predictions and the matchup table, and tells torpdata to build the blog data",
+     "legs": 1,
+     "median_s": 595.0,
+     "min_s": 545.0,
+     "max_s": 610.0,
+     "leg_median_s": 595.0,
+     "slowest_leg_median_s": 595.0,
+     "runs_seen": 5,
+     "steps": [
+      {
+       "name": "Set up job",
+       "about": "GitHub starts the machine and downloads the actions this job uses",
+       "source": "builtin",
+       "median_s": 2.0,
+       "min_s": 1.0,
+       "max_s": 4.0,
+       "n": 5,
+       "of": 5
+      },
+      {
+       "name": "Checkout repository",
+       "about": "Downloads this repo's code onto the machine",
+       "source": "builtin",
+       "median_s": 3.0,
+       "min_s": 2.0,
+       "max_s": 6.0,
+       "n": 5,
+       "of": 5
+      },
+      {
+       "name": "Setup R",
+       "about": "Installs R 4.4.0",
+       "source": "config",
+       "median_s": 35.0,
+       "min_s": 24.0,
+       "max_s": 60.0,
+       "n": 5,
+       "of": 5
+      },
+      {
+       "name": "Setup R dependencies",
+       "about": "Installs the R packages the predictions need (from a cache when it can)",
+       "source": "config",
+       "median_s": 53.0,
+       "min_s": 47.0,
+       "max_s": 57.0,
+       "n": 5,
+       "of": 5
+      },
+      {
+       "name": "Build match predictions",
+       "about": "Runs run_predictions_pipeline() (data-raw/02-models/build_match_predictions.R): loads the data, injuries and weather, trains the GAM and XGBoost match models on completed matches, predicts the coming round (matches that have started stay locked), validates and uploads the predictions",
+       "source": "config",
+       "median_s": 477.0,
+       "min_s": 446.0,
+       "max_s": 506.0,
+       "n": 5,
+       "of": 5
+      },
+      {
+       "name": "Build + publish matchup table",
+       "about": "Runs data-raw/02-models/build_matchup_table.R: builds the table of every team pairing that the site uses to price finals, and publishes it; a failure here does not fail the run",
+       "source": "config",
+       "median_s": 4.0,
+       "min_s": 3.0,
+       "max_s": 5.0,
+       "n": 5,
+       "of": 5
+      },
+      {
+       "name": "Get prediction info",
+       "about": "Reads the current season and the next week to predict",
+       "source": "config",
+       "median_s": 4.0,
+       "min_s": 3.0,
+       "max_s": 4.0,
+       "n": 5,
+       "of": 5
+      },
+      {
+       "name": "Predictions summary",
+       "about": "Writes the date, season, week and what started the run to the run's summary page",
+       "source": "config",
+       "median_s": 0.0,
+       "min_s": 0.0,
+       "max_s": 0.0,
+       "n": 5,
+       "of": 5
+      },
+      {
+       "name": "Dispatch blog data build to torpdata",
+       "about": "Sends the blog-trigger event to the torpdata repository, which starts its Build blog data run",
+       "source": "config",
+       "median_s": 0.0,
+       "min_s": 0.0,
+       "max_s": 1.0,
+       "n": 5,
+       "of": 5
+      },
+      {
+       "name": "Post Setup R dependencies",
+       "about": "Clean-up for an earlier step (saves caches, removes credentials)",
+       "source": "builtin",
+       "median_s": 3.0,
+       "min_s": 0.0,
+       "max_s": 5.0,
+       "n": 5,
+       "of": 5
+      },
+      {
+       "name": "Post Checkout repository",
+       "about": "Clean-up for an earlier step (saves caches, removes credentials)",
+       "source": "builtin",
+       "median_s": 0.0,
+       "min_s": 0.0,
+       "max_s": 1.0,
+       "n": 5,
+       "of": 5
+      },
+      {
+       "name": "Complete job",
+       "about": "GitHub closes the job and cleans up the machine",
+       "source": "builtin",
+       "median_s": 0.0,
+       "min_s": 0.0,
+       "max_s": 0.0,
+       "n": 5,
+       "of": 5
+      }
+     ],
+     "stages": {
+      "Stages of the match predictions pipeline": [
+       {
+        "name": "Loading data",
+        "median_s": 42.855151,
+        "min_s": 35.996985,
+        "max_s": 52.457134,
+        "n": 5
+       },
+       {
+        "name": "Building fixture features",
+        "median_s": 0.069651,
+        "min_s": 0.055511,
+        "max_s": 0.356208,
+        "n": 5
+       },
+       {
+        "name": "Loading PSR",
+        "median_s": 7.051651,
+        "min_s": 6.893978,
+        "max_s": 7.901307,
+        "n": 5
+       },
+       {
+        "name": "Processing lineups",
+        "median_s": 4.272725,
+        "min_s": 4.125347,
+        "max_s": 4.967516,
+        "n": 5
+       },
+       {
+        "name": "Computing features",
+        "median_s": 0.122834,
+        "min_s": 0.118071,
+        "max_s": 0.16579,
+        "n": 5
+       },
+       {
+        "name": "Loading injuries",
+        "median_s": 28.584686,
+        "min_s": 26.153445,
+        "max_s": 32.898403,
+        "n": 5
+       },
+       {
+        "name": "Loading weather",
+        "median_s": 1.31754,
+        "min_s": 0.995355,
+        "max_s": 1.564526,
+        "n": 5
+       },
+       {
+        "name": "Building model dataset",
+        "median_s": 0.156889,
+        "min_s": 0.150085,
+        "max_s": 0.204494,
+        "n": 5
+       },
+       {
+        "name": "Training GAM models on completed matches",
+        "median_s": 175.912712,
+        "min_s": 166.368111,
+        "max_s": 184.243834,
+        "n": 5
+       },
+       {
+        "name": "Training XGBoost models",
+        "median_s": 3.385915,
+        "min_s": 3.24938,
+        "max_s": 4.12848,
+        "n": 5
+       },
+       {
+        "name": "Generating predictions",
+        "median_s": 0.73698,
+        "min_s": 0.636181,
+        "max_s": 1.027673,
+        "n": 5
+       },
+       {
+        "name": "Validating predictions",
+        "median_s": 0.003539,
+        "min_s": 0.003413,
+        "max_s": 0.004765,
+        "n": 5
+       },
+       {
+        "name": "Uploading predictions",
+        "median_s": 200.75095,
+        "min_s": 194.186462,
+        "max_s": 215.881903,
+        "n": 5
+       }
+      ]
+     },
+     "stage_notes": {
+      "Stages of the match predictions pipeline": "Each stage runs from its header line to the next one; the last runs to the end of the step."
+     },
+     "stage_about": {
+      "Loading data": "Loads the stadium list, expected goals, fixtures, results, teams and TORP ratings from torpdata, and checks them",
+      "Building fixture features": "Builds the fixture table from the fixture list",
+      "Loading PSR": "Computes PSR (player stat ratings) from the released player stat ratings",
+      "Processing lineups": "Loads the team xRAPM snapshot and builds each team's rating from its lineup",
+      "Computing features": "Builds each match's features from the two teams' ratings and the ground",
+      "Loading injuries": "Scrapes the current injury list",
+      "Loading weather": "Fetches the weather",
+      "Building model dataset": "Joins everything into one table for the models",
+      "Training GAM models on completed matches": "Trains the GAM match models on matches already played",
+      "Training XGBoost models": "Trains the XGBoost match models",
+      "Generating predictions": "Predicts the coming round (matches already started keep their locked prediction)",
+      "Validating predictions": "Checks the predictions before they are published",
+      "Uploading predictions": "Uploads the predictions to the torpdata releases"
+     }
+    }
+   ],
+   "phases": [
+    {
+     "jobs": [
+      "compute-ratings"
+     ],
+     "median_s": 579.0,
+     "min_s": 490.0,
+     "max_s": 596.0,
+     "slowest": "compute-ratings",
+     "parallel": false
+    },
+    {
+     "jobs": [
+      "build-predictions"
+     ],
+     "median_s": 595.0,
+     "min_s": 545.0,
+     "max_s": 610.0,
+     "slowest": "build-predictions",
+     "parallel": false
+    }
+   ],
+   "critical_path": [
+    "compute-ratings",
+    "build-predictions"
+   ],
+   "slowest_steps": [
+    {
+     "job": "build-predictions",
+     "step": "Build match predictions",
+     "about": "Runs run_predictions_pipeline() (data-raw/02-models/build_match_predictions.R): loads the data, injuries and weather, trains the GAM and XGBoost match models on completed matches, predicts the coming round (matches that have started stay locked), validates and uploads the predictions",
+     "median_s": 477.0
+    },
+    {
+     "job": "compute-ratings",
+     "step": "Compute TORP ratings",
+     "about": "Runs data-raw/03-ratings/run_ratings_pipeline.R: player game data, EPR ratings for the current season, team ratings, player game and season ratings, then PSR for the men's and the women's (AFLW) competitions; each stage uploads to the torpdata releases (skipped when torpdata reports a team-only release)",
+     "median_s": 334.0
+    },
+    {
+     "job": "compute-ratings",
+     "step": "Rebuild stat ratings",
+     "about": "Runs three scripts in data-raw/06-stat-ratings/: collects every player's per-match stats and adjusts them for the opponent, estimates each player's stat ratings round by round, and uploads the stat ratings to the torpdata release (skipped when torpdata reports a team-only release)",
+     "median_s": 139.0
+    },
+    {
+     "job": "compute-ratings",
+     "step": "Setup R dependencies",
+     "about": "Installs the R packages torp needs (from a cache when it can)",
+     "median_s": 53.0
+    },
+    {
+     "job": "build-predictions",
+     "step": "Setup R dependencies",
+     "about": "Installs the R packages the predictions need (from a cache when it can)",
+     "median_s": 53.0
+    }
+   ]
+  }
+ ],
+ "warnings": []
+}

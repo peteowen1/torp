@@ -456,8 +456,13 @@ compare_benchmarks <- function(a, b) {
                "WORST cor(adj, raw)", "WORST TOG removed"),
     a = c(vapply(PATHS, function(p) f(a, p), 0), wa),
     b = c(vapply(PATHS, function(p) f(b, p), 0), wb))
-  setnames(rows, c("a", "b"), c(a$label, b$label))
-  rows[, delta := round(get(b$label) - get(a$label), 4)]
+  # Delta BEFORE naming the columns: with equal labels (two arms both called
+  # "v4", 2026-11-25) get(b$label) and get(a$label) read the same column and
+  # every delta printed 0 while the arms differed.
+  rows[, delta := round(b - a, 4)]
+  labs <- c(a$label, b$label)
+  if (identical(labs[1], labs[2])) labs <- paste0(labs, c(" (a)", " (b)"))
+  setnames(rows, c("a", "b"), labs)
   cat("\n=== ", a$label, " vs ", b$label, " ===\n", sep = "")
   print(rows)
   cat("\nNo single verdict on the rows above. Descriptive and predictive rows want\n")

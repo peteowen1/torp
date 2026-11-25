@@ -1,0 +1,129 @@
+{
+  "repo": "peteowen1/torp",
+  "title": "torp CI pipeline",
+  "about": "What torp's daily GitHub Actions run does, in order, and how long each part takes: it recomputes the player and team ratings from the data torpdata has just released, publishes them, then builds and publishes the AFL match predictions. When it finishes it starts torpdata's Build blog data run, which puts the results on the site's data store. This guide lives in .github/pipeline/ because the repo's docs/ folder is ignored by git (it holds the pkgdown website build).",
+  "output": ".github/pipeline/PIPELINE.md",
+  "summary_output": ".github/pipeline/pipeline-summary.json",
+  "runs": 5,
+  "pipelines": [
+    {
+      "name": "Daily ratings and predictions",
+      "workflow": "daily-ratings-predictions.yml",
+      "about": "Three jobs one after the other: offseason-gate, compute-ratings, then build-predictions. The gate (merged to main 25 Nov 2026, torp#325) skips the two R jobs on scheduled runs when no match is near; each R job installs R first. Runs counted are successful ones on the main branch where both R jobs succeeded and the run took over 10 minutes, so they predate the gate, which is why it is listed below as optional.",
+      "triggers": "In practice the four weekly pre-game schedule runs, so predictions use the published team lists: Thursday and Friday at 5pm and Saturday and Sunday at 11am, Sydney summer time; all five runs counted here were schedule runs. Also started by torpdata's Daily Data Release, which sends the ratings-trigger event after a real data release (within hours of a match ending), and by hand with Run workflow (inputs: force, week_override, seasons). When build-predictions succeeds it sends the blog-trigger event to torpdata, which starts torpdata's Build blog data run (see torpdata's guide). The two runs are not stitched together here.",
+      "select": {
+        "events": ["schedule", "workflow_dispatch", "repository_dispatch"],
+        "branch": "main",
+        "require_jobs": ["^compute-ratings$", "^build-predictions$"],
+        "min_seconds": 600
+      },
+      "jobs": [
+        {
+          "name": "offseason-gate",
+          "match": "^offseason-gate$",
+          "optional": true,
+          "about": "On scheduled runs asks whether any match starts in the next 14 days or finished since the last ratings upload, and skips the two jobs below if not",
+          "steps": {
+            "Anything to do?": "Reads when torp_ratings.parquet was last uploaded and runs data-raw/02-models/offseason_gate.R, which decides whether the run is needed"
+          }
+        },
+        {
+          "name": "compute-ratings",
+          "match": "^compute-ratings$",
+          "about": "Rebuilds the player stat ratings, then computes the TORP ratings (player game data, EPR, team ratings, player game and season ratings, PSR) and uploads them to the torpdata releases",
+          "steps": {
+            "Setup R": "Installs R 4.4.0",
+            "Setup R dependencies": "Installs the R packages torp needs (from a cache when it can)",
+            "Rebuild stat ratings": "Runs three scripts in data-raw/06-stat-ratings/: collects every player's per-match stats and adjusts them for the opponent, estimates each player's stat ratings round by round, and uploads the stat ratings to the torpdata release (skipped when torpdata reports a team-only release)",
+            "Compute TORP ratings": "Runs data-raw/03-ratings/run_ratings_pipeline.R: player game data, EPR ratings for the current season, team ratings, player game and season ratings, then PSR for the men's and the women's (AFLW) competitions; each stage uploads to the torpdata releases (skipped when torpdata reports a team-only release)",
+            "Get release info": "Reads the current AFL season and round",
+            "Ratings summary": "Writes the date, season, round and what started the run to the run's summary page"
+          },
+          "log": {
+            "headers": [
+              {
+                "regex": "^── (?P<name>(?:Loading data|Preparing stat rating data|Opponent-adjusting per-game stats|Loading stat rating data|Estimating stat ratings by round|Combining results|Loading computed stat ratings|Exporting to torpdata)) ─",
+                "label": "Rebuild stat ratings, in order"
+              },
+              {
+                "regex": "^── (?P<name>Stage \\d+: [^─]+?) ─",
+                "label": "Stages of run_ratings_pipeline.R"
+              }
+            ],
+            "about": {
+              "Loading data": "Loads the per-match player stats, rosters, fixtures and lineups from torpdata",
+              "Preparing stat rating data": "Builds one table of every player's stats for every match",
+              "Opponent-adjusting per-game stats": "Adjusts each game's stats for the opponent, using each player's rolling past profile",
+              "Loading stat rating data": "Reloads the prepared table for the rating step",
+              "Estimating stat ratings by round": "Estimates every player's stat ratings round by round",
+              "Combining results": "Joins the rounds' results into one table",
+              "Loading computed stat ratings": "Reloads the combined ratings for export",
+              "Exporting to torpdata": "Uploads the stat ratings to the player_stat_ratings-data release",
+              "Stage 2: Build Player Game Data": "Builds each player's per-match data from play-by-play, player stats and teams, and releases it",
+              "Stage 3: Compute EPR Ratings": "Computes the EPR ratings for the current season and releases them",
+              "Stage 4: Compute Team Ratings": "Computes the team ratings from the player ratings and releases them",
+              "Stage 5: Player Game & Season Ratings": "Builds the player game and player season ratings",
+              "Stage 6: Compute & Release PSR": "Computes PSR (player stat ratings) and releases it",
+              "Stage 7: Compute & Release AFLW PSR": "The same for the women's competition (AFLW); a failure here is reported but does not stop the run"
+            }
+          },
+          "stage_notes": {
+            "Rebuild stat ratings, in order": "Each stage runs from its header line to the next one; the last runs to the end of the step.",
+            "Stages of run_ratings_pipeline.R": "Each stage runs from its header line to the next one; the last runs to the end of the step. Stage 1 (refresh upstream data) is switched off in this workflow."
+          }
+        },
+        {
+          "name": "build-predictions",
+          "match": "^build-predictions$",
+          "about": "Trains the match models, predicts the next round, publishes the predictions and the matchup table, and tells torpdata to build the blog data",
+          "steps": {
+            "Setup R": "Installs R 4.4.0",
+            "Setup R dependencies": "Installs the R packages the predictions need (from a cache when it can)",
+            "Build match predictions": "Runs run_predictions_pipeline() (data-raw/02-models/build_match_predictions.R): loads the data, injuries and weather, trains the GAM and XGBoost match models on completed matches, predicts the coming round (matches that have started stay locked), validates and uploads the predictions",
+            "Build + publish matchup table": "Runs data-raw/02-models/build_matchup_table.R: builds the table of every team pairing that the site uses to price finals, and publishes it; a failure here does not fail the run",
+            "Notify if the matchup table did not publish": "Only if the matchup table step failed: opens or updates a tracking issue",
+            "Get prediction info": "Reads the current season and the next week to predict",
+            "Predictions summary": "Writes the date, season, week and what started the run to the run's summary page",
+            "Dispatch blog data build to torpdata": "Sends the blog-trigger event to the torpdata repository, which starts its Build blog data run",
+            "Notify on failure": "Only if this job failed: opens or updates a tracking issue"
+          },
+          "log": {
+            "headers": [
+              {
+                "regex": "^── (?P<name>(?:Loading data|Building fixture features|Loading PSR|Processing lineups|Computing features|Loading injuries|Loading weather|Building model dataset|Training GAM models on completed matches|Training XGBoost models|Generating predictions|Validating predictions|Uploading predictions))(?: for [^─]+?)? ─",
+                "label": "Stages of the match predictions pipeline"
+              }
+            ],
+            "about": {
+              "Loading data": "Loads the stadium list, expected goals, fixtures, results, teams and TORP ratings from torpdata, and checks them",
+              "Building fixture features": "Builds the fixture table from the fixture list",
+              "Loading PSR": "Computes PSR (player stat ratings) from the released player stat ratings",
+              "Processing lineups": "Loads the team xRAPM snapshot and builds each team's rating from its lineup",
+              "Computing features": "Builds each match's features from the two teams' ratings and the ground",
+              "Loading injuries": "Scrapes the current injury list",
+              "Loading weather": "Fetches the weather",
+              "Building model dataset": "Joins everything into one table for the models",
+              "Training GAM models on completed matches": "Trains the GAM match models on matches already played",
+              "Training XGBoost models": "Trains the XGBoost match models",
+              "Generating predictions": "Predicts the coming round (matches already started keep their locked prediction)",
+              "Validating predictions": "Checks the predictions before they are published",
+              "Uploading predictions": "Uploads the predictions to the torpdata releases"
+            }
+          },
+          "stage_notes": {
+            "Stages of the match predictions pipeline": "Each stage runs from its header line to the next one; the last runs to the end of the step."
+          }
+        },
+        {
+          "name": "notify-cancelled-or-upstream-failure",
+          "match": "^notify-cancelled-or-upstream-failure$",
+          "optional": true,
+          "about": "Only when ratings failed or a job was cancelled (a timeout): opens or updates the tracking issue",
+          "steps": {
+            "Open or update the failure issue": "Opens or comments on the Daily Ratings/Predictions Failed issue"
+          }
+        }
+      ]
+    }
+  ]
+}
