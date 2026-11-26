@@ -17,9 +17,10 @@
 \item{season}{That season.}
 
 \item{history_stats}{Last season's player stats; \code{NULL} loads them, \code{FALSE}
-skips the seed on purpose (no alert).}
+skips the seed on purpose (no alert). Ignored for the first season.}
 
-\item{strict}{Abort instead of degrading (see above).}
+\item{strict}{Abort instead of degrading (see above). \code{VERSEBUS_STRICT=1}
+has the same effect.}
 }
 \value{
 \code{pstats_season}, opponent-adjusted. Non-strict, a failed adjustment

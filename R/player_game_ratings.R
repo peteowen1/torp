@@ -650,15 +650,21 @@ player_season_stats <- function(season_val = get_afl_season(),
 #' @param pstats_season One season of player stats.
 #' @param season That season.
 #' @param history_stats Last season's player stats; `NULL` loads them, `FALSE`
-#'   skips the seed on purpose (no alert).
-#' @param strict Abort instead of degrading (see above).
+#'   skips the seed on purpose (no alert). Ignored for the first season.
+#' @param strict Abort instead of degrading (see above). `VERSEBUS_STRICT=1`
+#'   has the same effect.
 #' @return `pstats_season`, opponent-adjusted. Non-strict, a failed adjustment
 #'   returns the unadjusted input with an alert (PSV can still run on it).
 #' @keywords internal
 .adjust_stats_seeded <- function(pstats_season, season, history_stats = NULL, strict = FALSE) {
+  # Strict when asked, or when VERSEBUS_STRICT=1 (both nightly entry scripts
+  # set it): a fail-closed run must not publish a cold or unadjusted season.
+  # `msg` carries conditionMessage() text, so it goes in as data ("{msg}"):
+  # a raw string with a brace in it would be read as glue and throw.
+  is_strict <- isTRUE(strict) || .strict_mode()
   fall_short <- function(msg) {
-    if (isTRUE(strict)) cli::cli_abort("{msg} (strict: not publishing a degraded {season} adjustment)")
-    cli::cli_alert_warning(msg)
+    if (is_strict) cli::cli_abort("{msg} (strict: not publishing a degraded {season} adjustment)")
+    cli::cli_alert_warning("{msg}")
   }
   cur <- data.table::copy(data.table::as.data.table(pstats_season))
   cur[, .seed_row := seq_len(.N)]

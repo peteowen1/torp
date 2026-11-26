@@ -339,6 +339,7 @@ test_that(".adjust_stats_seeded() refuses a degraded seed or adjustment under st
   cur[[col]] <- c(30, 20)
 
   # A failed history load: alert and cold start normally, abort under strict.
+  withr::local_envvar(VERSEBUS_STRICT = "")
   local_mocked_bindings(load_player_stats = function(...) stop("network down"), .package = "torp")
   expect_message(r <- .adjust_stats_seeded(cur, 2026), "network down")
   expect_identical(r$player_id, cur$player_id)
@@ -359,4 +360,20 @@ test_that(".adjust_stats_seeded() refuses a degraded seed or adjustment under st
   no_rate <- cur[, setdiff(names(cur), col), with = FALSE]
   expect_error(suppressMessages(suppressWarnings(
     .adjust_stats_seeded(no_rate, 2026, history_stats = FALSE, strict = TRUE))), "no adjusted columns")
+})
+
+test_that(".adjust_stats_seeded() obeys VERSEBUS_STRICT and survives braces in an error", {
+  defs <- stat_rating_definitions()
+  col <- defs$source_col[defs$type == "rate"][1]
+  cur <- data.table::data.table(player_id = c("P1", "P2"), match_id = "M1", team = c("A", "C"),
+                                opponent = c("C", "A"), match_date_rating = as.Date("2026-03-05"))
+  cur[[col]] <- c(30, 20)
+  local_mocked_bindings(load_player_stats = function(...) stop("bad {x} json"), .package = "torp")
+  # A brace in the error text is reported, not re-read as glue.
+  withr::local_envvar(VERSEBUS_STRICT = "")
+  expect_message(r <- .adjust_stats_seeded(cur, 2026), "bad {x} json", fixed = TRUE)
+  expect_identical(r$player_id, cur$player_id)
+  # The nightly sets VERSEBUS_STRICT=1 without passing strict: still fail closed.
+  withr::local_envvar(VERSEBUS_STRICT = "1")
+  expect_error(suppressMessages(.adjust_stats_seeded(cur, 2026)), "bad {x} json", fixed = TRUE)
 })
