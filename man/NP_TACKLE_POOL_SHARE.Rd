@@ -11,10 +11,10 @@ An object of class \code{numeric} of length 1.
 NP_TACKLE_POOL_SHARE
 }
 \description{
-Test-version flag, 0 (off) by default (Pete, 2026-11-25). When a chains-only
-"Tackle" row follows the opposition's act and the tackler's side holds a
-\code{defence_pool} payment on that act (the ball was won from the other
-side), this share of that pool payment is paid to the tackler by name. The
-amount is unchanged, so conservation holds. 0.5 is the decided value when on.
+0.5 from rating vintage v18 (Pete, 2026-11-25; 0 turns it off). When a
+chains-only "Tackle" row follows the opposition's act and the tackler's side
+holds a \code{defence_pool} payment on that act (the ball was won from the
+other side), this share of that pool payment is paid to the tackler by name.
+The amount is unchanged, so conservation holds.
 }
 \keyword{internal}

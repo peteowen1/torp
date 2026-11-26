@@ -1170,8 +1170,20 @@ PSR_POSITION_STANDARDISE <- TRUE
 #' \code{data-raw/03-ratings/promote_rating_vintage.R} (PROMOTE_FROM=v16,
 #' PROMOTE_TO=v17) and move the manifest to canonical v17 BEFORE this reaches
 #' main.
+#'
+#' v18 (2026-11-27): the v18 bundle (docs/plans/V18-BUNDLE.md). Net points
+#' prices each season on difficulty models fitted on the season before
+#' (torp#258); free kicks against, chains tackles and the beaten contest
+#' target are charged or paid (four NP flags on); the stat opponent adjustment
+#' uses prior games only, seeded with last season (A162); exact GAM
+#' predictions (torp#309); B69; 63 more constants tracked by the guard. The
+#' 2021-2025 play-by-play is re-scored on the current EP/WP models
+#' (\code{c5cca7c569ff}; 2026 was already current and came out identical).
+#' Preserve v17 with \code{data-raw/03-ratings/promote_rating_vintage.R}
+#' (PROMOTE_FROM=v17, PROMOTE_TO=v18) and move the manifest to canonical v18
+#' BEFORE this reaches main.
 #' @keywords internal
-RATING_VINTAGE <- "v17"
+RATING_VINTAGE <- "v18"
 
 #' Map from the 20-way team-sheet lineup position to a 6-way position group
 #'
@@ -1822,6 +1834,11 @@ NP_RECEIVER_SHARE <- 0.30
 #' take a high share but not all. The remainder spreads across the rest of the
 #' on-field team by time on ground, so nobody takes all of it and nobody is
 #' wholly exempt.
+#'
+#' Display-only: it shapes \code{build_net_points()}'s raw ledger, but
+#' \code{.np_team_margin()} re-splits the pool before anything is published
+#' (0.5 vs 0 moved published EPV at most 5.3e-15 on 2026 rounds 0-4, measured
+#' 2026-11-26).
 #' @keywords internal
 NP_MIRROR_SHARE <- 0.50
 
@@ -1837,6 +1854,9 @@ NP_MIRROR_SHARE <- 0.50
 #' a mirror) where the empirical one is only identified for defence-wins, and it
 #' needs no chains load. Swapping in empirical weights later changes only WHO is
 #' paid, never whether the ledger balances.
+#'
+#' Display-only for published ratings, like \code{NP_MIRROR_SHARE}: reversing
+#' the map moved published EPV at most 5.8e-15 on 2026 rounds 0-4 (2026-11-26).
 #' @keywords internal
 NP_POSITION_MIRROR <- c(
   FF = "FB",   FB = "FF",
@@ -1928,6 +1948,20 @@ NP_TURNOVER_ON_ALL_ACTS <- TRUE
 #' him.
 #' @keywords internal
 NP_TEAM_MARGIN_CONVENTION <- TRUE
+
+#' Which season a one-season frame's difficulty models are fitted on
+#'
+#' `"prior_season"` (since v18, torp#258, Pete 2026-11-10): a frame built from
+#' one season's play-by-play has its disposal-difficulty and contest models
+#' fitted on the season before (2021, the first season with chains, on 2022),
+#' through `np_difficulty_terms_for_season()`. That is the basis every gate
+#' since the v3/v4 flip was measured on. `"in_sample"` is the old behaviour:
+#' fit on the season being rated, which lets the models see the outcomes they
+#' then price and re-scores every published match each round as the season
+#' grows. Multi-season frames and frames priced on a saved season fit
+#' (`np_fit`) are unaffected by this setting.
+#' @keywords internal
+NP_DIFFICULTY_FIT <- "prior_season"
 
 #' Share of a row paid to the named player under the team-margin convention
 #'
@@ -2114,46 +2148,46 @@ NP_ERROR_BLAME_SHARE <- 1
 
 #' Charge a free kick given away to the player who gave it away
 #'
-#' Test-version flag, off by default (Pete, 2026-11-25; plan
+#' On from rating vintage v18 (Pete, 2026-11-25, after a neutral gate; plan
 #' \code{docs/plans/NP-FREE-AGAINST-AND-TACKLES.md}). "Free Against" is a
-#' chains-only row, so today the debit stays with the teammate whose disposal
-#' came before it (2026 R0: Sam De Koning wears the free Jack Henry gave away).
-#' \code{TRUE} adds it to the \code{NP_ERROR_DESCS} route, so
+#' chains-only row, so with this off the debit stays with the teammate whose
+#' disposal came before it (2026 R0: Sam De Koning wears the free Jack Henry
+#' gave away). \code{TRUE} adds it to the \code{NP_ERROR_DESCS} route, so
 #' \code{NP_ERROR_BLAME_SHARE} of that debit moves to the player named on the
 #' Free Against row. It moves the recipient, never the amount.
 #' @keywords internal
-NP_FREE_AGAINST_BLAME <- FALSE
+NP_FREE_AGAINST_BLAME <- TRUE
 
 #' Share of a turnover's defence pool paid to the chains tackler who forced it
 #'
-#' Test-version flag, 0 (off) by default (Pete, 2026-11-25). When a chains-only
-#' "Tackle" row follows the opposition's act and the tackler's side holds a
-#' \code{defence_pool} payment on that act (the ball was won from the other
-#' side), this share of that pool payment is paid to the tackler by name. The
-#' amount is unchanged, so conservation holds. 0.5 is the decided value when on.
+#' 0.5 from rating vintage v18 (Pete, 2026-11-25; 0 turns it off). When a
+#' chains-only "Tackle" row follows the opposition's act and the tackler's side
+#' holds a \code{defence_pool} payment on that act (the ball was won from the
+#' other side), this share of that pool payment is paid to the tackler by name.
+#' The amount is unchanged, so conservation holds.
 #' @keywords internal
-NP_TACKLE_POOL_SHARE <- 0
+NP_TACKLE_POOL_SHARE <- 0.5
 
 #' Share of a stoppage pool paid to the chains tackler in that stoppage
 #'
-#' Test-version flag, 0 (off) by default (Pete, 2026-11-25). When a chains-only
-#' "Tackle" row follows a stoppage, this share of the tackler's own side's
-#' \code{stoppage_pool} payment on that stoppage is paid to him by name,
-#' whatever its sign. Every other tackle is paid nothing. 0.5 is the decided
-#' value when on.
+#' 0.5 from rating vintage v18 (Pete, 2026-11-25; 0 turns it off). When a
+#' chains-only "Tackle" row follows a stoppage, this share of the tackler's own
+#' side's \code{stoppage_pool} payment on that stoppage is paid to him by name,
+#' whatever its sign. Every other tackle is paid nothing.
 #' @keywords internal
-NP_TACKLE_STOPPAGE_SHARE <- 0
+NP_TACKLE_STOPPAGE_SHARE <- 0.5
 
 #' Share of a lost contest kick's debit charged to the beaten target
 #'
-#' Test-version flag, 0 (off) by default (Pete 2026-09-11, "charge the beaten
-#' target instead of the kicker"; 2026-11-12, "build as a gated arm"). When a
-#' kick is lost at a contest the defence won and chains names the kick's
-#' target, a team-mate of the kicker, this share of the kicker's turnover debit
-#' moves to that target. Never on a turnover \code{NP_ERROR_BLAME_SHARE} already
-#' moved. Moves the recipient, never the amount. 1 is the decided value when on.
+#' 1 from rating vintage v18 (Pete 2026-09-11, "charge the beaten target
+#' instead of the kicker"; gated 2026-11-12, shipped by click 2026-11-26; 0
+#' turns it off). When a kick is lost at a contest the defence won and chains
+#' names the kick's target, a team-mate of the kicker, this share of the
+#' kicker's turnover debit moves to that target. Never on a turnover
+#' \code{NP_ERROR_BLAME_SHARE} already moved. Moves the recipient, never the
+#' amount.
 #' @keywords internal
-NP_NAMED_LOSER_SHARE <- 0
+NP_NAMED_LOSER_SHARE <- 1
 
 #' A quarter's last act is nobody's loss: its evaporated state goes to the pool
 #'
@@ -2419,14 +2453,16 @@ NP_STOPPAGE_SHRINK_N <- 20
 #' Whether non-TOG-adjusted rate stats count unplayed rounds as exposure
 #'
 #' dream_team_points and rating_points use one unit of exposure per row. With
-#' \code{FALSE} (the published behaviour) a round the player was rostered for
-#' but not selected still adds one unit of exposure with nothing in the
-#' numerator, so the per-game rate is deflated for anyone who misses rounds.
-#' With \code{TRUE} only games played count as exposure (finding B69 in
+#' \code{FALSE} (published up to rating vintage v17) a round the player was
+#' rostered for but not selected still adds one unit of exposure with nothing
+#' in the numerator, so the per-game rate is deflated for anyone who misses
+#' rounds. With \code{TRUE} (from v18; Pete decided 2026-11-24 after walking
+#' real rows) only games played count as exposure (finding B69 in
 #' docs/reviews/CODEBASE-REVIEW-2026-10-17.md of the torpverse repo; measured
-#' 2025-26: 19,053 of 38,982 stat-rating rows are availability-only).
-#' Held at \code{FALSE} until the owner has walked real example rows; flipping
-#' it to \code{TRUE} is the whole change, and it moves the published
-#' dream_team_points_* and rating_points_* columns.
+#' 2025-26: 19,053 of 38,982 stat-rating rows are availability-only). It moves
+#' the published dream_team_points_* and rating_points_* columns only: no PSR,
+#' OSR or DSR coefficient reads them (checked 2026-11-26), so TORP does not move.
+#' It is in \code{.rating_defining_constants()} all the same, so the vintage
+#' guard sees any change to it.
 #' @keywords internal
-STAT_RATE_NONTOG_EXCLUDE_UNPLAYED <- FALSE
+STAT_RATE_NONTOG_EXCLUDE_UNPLAYED <- TRUE

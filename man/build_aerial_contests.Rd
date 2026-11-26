@@ -4,15 +4,20 @@
 \alias{build_aerial_contests}
 \title{Build the aerial contest table from chains}
 \usage{
-build_aerial_contests(chains, pbp_data)
+build_aerial_contests(chains, pbp_data, half = NULL)
 }
 \arguments{
 \item{chains}{Raw chains data.}
 
 \item{pbp_data}{Clean PBP carrying \code{exp_pts} and \code{delta_epv}.}
+
+\item{half}{Field half-length that feeds \code{goal_dist} and \code{i50f};
+\code{NULL} estimates it from the rows given. See
+\code{build_disposal_events()}.}
 }
 \value{
-A data.table, one row per aerial contest.
+A data.table, one row per aerial contest. The \code{half} used rides
+along as attribute \code{half}.
 }
 \description{
 Anchors on the KICK, not on the \code{Contest Target} / \code{Spoil}

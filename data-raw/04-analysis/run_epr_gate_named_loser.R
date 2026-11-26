@@ -33,7 +33,11 @@ set_arm <- function(on) {
   assignInNamespace("NP_NAMED_LOSER_SHARE", if (on) 1 else 0, ns = "torp")
   stopifnot(identical(torp:::NP_NAMED_LOSER_SHARE, if (on) 1 else 0))
 }
-stopifnot(identical(torp:::NP_NAMED_LOSER_SHARE, 0), identical(torp:::EPV_ENGINE, "v4"))
+# Historical gate (2026-11-25), run when the flag defaulted to 0. From v18 it
+# defaults to 1 (with Free Against and chains tackles on), so the old
+# precondition no longer holds; set_arm() sets both arms explicitly, but a
+# re-run's baseline also carries the v18 Free Against / tackle rules.
+stopifnot(identical(torp:::EPV_ENGINE, "v4"))
 
 for (s in SEASONS) {
   f_off <- file.path(OUT_DIR, sprintf("nl_pgd_off_%d.parquet", s))

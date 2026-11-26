@@ -101,6 +101,9 @@
     # number, so the drift guard has to see them.
     NP_TEAM_MARGIN_CONVENTION = NP_TEAM_MARGIN_CONVENTION,
     NP_TEAM_MARGIN_NAMED_SHARE = NP_TEAM_MARGIN_NAMED_SHARE,
+    # torp#258 (v18): which season a one-season frame's difficulty and contest
+    # models are fitted on. Moves every published net points figure.
+    NP_DIFFICULTY_FIT = NP_DIFFICULTY_FIT,
     NP_TEAM_MARGIN_POOL_BY = NP_TEAM_MARGIN_POOL_BY,
     # v14: every row books both sides, and the defence's unnamed pool credit is
     # shared half by defensive acts. Booking alone moves nothing while the pool
@@ -166,6 +169,13 @@
     NP_ERROR_DESCS = as.list(NP_ERROR_DESCS),
     EPV3_TARGET_FROM_I50 = EPV3_TARGET_FROM_I50,
     NP_SIREN_TO_POOL = NP_SIREN_TO_POOL,
+    # v18 (Pete 2026-11-25 / 26, both gates neutral): wired in the same change
+    # that turns them on, as their register entry asked. Free Against moves a
+    # mean of 0.0024 EPV per player-game, named-loser 0.149.
+    NP_FREE_AGAINST_BLAME = NP_FREE_AGAINST_BLAME,
+    NP_TACKLE_POOL_SHARE = NP_TACKLE_POOL_SHARE,
+    NP_TACKLE_STOPPAGE_SHARE = NP_TACKLE_STOPPAGE_SHARE,
+    NP_NAMED_LOSER_SHARE = NP_NAMED_LOSER_SHARE,
     NP_UNCONTESTED_RECEIVER_SHARE = NP_UNCONTESTED_RECEIVER_SHARE,
     # The disposer's share of a lost kick's surprise. Swept for the first time
     # 2026-09-08 (its own docstring called the shipped 0.30 "the default the
@@ -268,7 +278,88 @@
     EPV_MODEL_FEATURES = EPV_MODEL_FEATURES,
     # The EPV opponent adjustment, applied by default in build_ratings_history().
     EPV_OPP_LAMBDA_DECAY = EPV_OPP_LAMBDA_DECAY,
-    EPV_OPP_PRIOR_GAMES = EPV_OPP_PRIOR_GAMES
+    EPV_OPP_PRIOR_GAMES = EPV_OPP_PRIOR_GAMES,
+    # v18 item (3), 2026-11-26: the rest of the KNOWN_NON_DEFINING register
+    # that it called rating-defining, wired in one widening so the guard stops
+    # being blind to them. Only the entries measured inert or never read into
+    # arithmetic stay registered. Some of these may be dead under v4 (the
+    # weight-based epv_disp / epv_recv are overwritten by the Net Points
+    # channels, player_credit.R), which costs nothing here: a wired constant
+    # only trips the guard when its value changes.
+    #
+    # Raw EPV per-event weights (default_epv_params()).
+    EPV_BOUNCE_WT = EPV_BOUNCE_WT,
+    EPV_DISP_NEG_OFFSET = EPV_DISP_NEG_OFFSET,
+    EPV_DISP_POS_OFFSET = EPV_DISP_POS_OFFSET,
+    EPV_DISP_SCALE = EPV_DISP_SCALE,
+    EPV_RECV_NEG_MULT = EPV_RECV_NEG_MULT,
+    EPV_RECV_NEG_OFFSET = EPV_RECV_NEG_OFFSET,
+    EPV_RECV_POS_MULT = EPV_RECV_POS_MULT,
+    EPV_RECV_POS_OFFSET = EPV_RECV_POS_OFFSET,
+    EPV_RECV_SCALE = EPV_RECV_SCALE,
+    EPV_RECV_INTERCEPT_MARK_SCALE = EPV_RECV_INTERCEPT_MARK_SCALE,
+    EPV_RECV_FAILED_CONTEST_WT = EPV_RECV_FAILED_CONTEST_WT,
+    EPV_SPOIL_WT = EPV_SPOIL_WT,
+    EPV_TACKLE_WT = EPV_TACKLE_WT,
+    EPV_PRESSURE_WT = EPV_PRESSURE_WT,
+    EPV_DEF_PRESSURE_WT = EPV_DEF_PRESSURE_WT,
+    EPV_HITOUT_WT = EPV_HITOUT_WT,
+    EPV_HITOUT_ADV_WT = EPV_HITOUT_ADV_WT,
+    EPV_RUCK_CONTEST_WT = EPV_RUCK_CONTEST_WT,
+    EPV_CONTESTED_POSS_WT = EPV_CONTESTED_POSS_WT,
+    EPV_CONTESTED_MARKS_WT = EPV_CONTESTED_MARKS_WT,
+    EPV_GROUND_BALL_GETS_WT = EPV_GROUND_BALL_GETS_WT,
+    EPV_MARKS_INSIDE50_WT = EPV_MARKS_INSIDE50_WT,
+    EPV_INSIDE50S_WT = EPV_INSIDE50S_WT,
+    EPV_CLANGERS_WT = EPV_CLANGERS_WT,
+    EPV_SCORE_INVOLVEMENTS_WT = EPV_SCORE_INVOLVEMENTS_WT,
+    EPV_INTERCEPTS_WT = EPV_INTERCEPTS_WT,
+    EPV_ONE_PERCENTERS_WT = EPV_ONE_PERCENTERS_WT,
+    EPV_REBOUND50S_WT = EPV_REBOUND50S_WT,
+    EPV_FREES_AGAINST_WT = EPV_FREES_AGAINST_WT,
+    EPV_FREES_FOR_WT = EPV_FREES_FOR_WT,
+    EPV_GOALS_WT = EPV_GOALS_WT,
+    EPV_BEHINDS_WT = EPV_BEHINDS_WT,
+    EPV_MARKS_WT = EPV_MARKS_WT,
+    EPV_UNCONTESTED_POSS_WT = EPV_UNCONTESTED_POSS_WT,
+    EPV_SHOTS_AT_GOAL_WT = EPV_SHOTS_AT_GOAL_WT,
+    EPV_KICKS_WT = EPV_KICKS_WT,
+    EPV_HANDBALLS_WT = EPV_HANDBALLS_WT,
+    EPV_METRES_GAINED_WT = EPV_METRES_GAINED_WT,
+    EPV_TURNOVERS_WT = EPV_TURNOVERS_WT,
+    EPV_GOAL_ASSISTS_WT = EPV_GOAL_ASSISTS_WT,
+    # Position centring / standardisation / shrink at the EPR, EPV and PSR
+    # layers; several gate blocks in run_ratings_pipeline.R Stage 3.
+    EPR_POSITION_CENTRE = EPR_POSITION_CENTRE,
+    EPR_POSITION_SHRINK = EPR_POSITION_SHRINK,
+    EPR_POSITION_SHRINK_PRIOR = EPR_POSITION_SHRINK_PRIOR,
+    EPR_CENTRE_CHANNELS = as.list(EPR_CENTRE_CHANNELS),
+    EPV_LEVEL_CENTRE = EPV_LEVEL_CENTRE,
+    EPV_LEVEL_CENTRE_CHANNELS = as.list(EPV_LEVEL_CENTRE_CHANNELS),
+    EPV_POSITION_SHRINK = EPV_POSITION_SHRINK,
+    EPV_POSITION_SHRINK_RULE = EPV_POSITION_SHRINK_RULE,
+    EPV_POSITION_SHRINK_FLOOR = EPV_POSITION_SHRINK_FLOOR,
+    EPV_POSITION_SHRINK_PRIOR = EPV_POSITION_SHRINK_PRIOR,
+    EPV_HITOUT_CENTRE_ON_RUCK = EPV_HITOUT_CENTRE_ON_RUCK,
+    EPV_RUCK_INVOLVEMENT_MIN = EPV_RUCK_INVOLVEMENT_MIN,
+    EPV_RUCK_BLEND_WIDTH = EPV_RUCK_BLEND_WIDTH,
+    PSR_CENTRE_BY_ROUND = PSR_CENTRE_BY_ROUND,
+    PSR_CENTRE_ON_LISTED = PSR_CENTRE_ON_LISTED,
+    PSR_POSITION_STANDARDISE = PSR_POSITION_STANDARDISE,
+    PSR_PRIOR_RATE = PSR_PRIOR_RATE,
+    # Points scale, conversion and recency decay at the value layer.
+    EPV_POINTS_SCALE = EPV_POINTS_SCALE,
+    EPV_PER_CHANNEL_POINTS_SCALE = EPV_PER_CHANNEL_POINTS_SCALE,
+    EPV_CHANNEL_SCALE_KEYS = as.list(EPV_CHANNEL_SCALE_KEYS),
+    EPV_RUCK_SWING_SCALE = EPV_RUCK_SWING_SCALE,
+    EPV_WEIGHT_DECAY_DAYS = EPV_WEIGHT_DECAY_DAYS,
+    # A real `loading` default (player_ratings.R, psr.R), at identity 1.0.
+    EPR_LOADING_DEFAULT = EPR_LOADING_DEFAULT,
+    # B69 (v18). Moves only the published dream_team_points_* and
+    # rating_points_* skill ratings, which no PSR/OSR/DSR coefficient reads, so
+    # TORP does not move -- wired anyway so a flip of a flag that changes
+    # published numbers is never invisible to the guard (review, 2026-11-26).
+    STAT_RATE_NONTOG_EXCLUDE_UNPLAYED = STAT_RATE_NONTOG_EXCLUDE_UNPLAYED
   )
 }
 

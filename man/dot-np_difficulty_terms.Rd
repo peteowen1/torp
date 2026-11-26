@@ -11,7 +11,8 @@
   train_pbp = NULL,
   train_chains = NULL,
   models = NULL,
-  return_models = FALSE
+  return_models = FALSE,
+  half = NULL
 )
 }
 \arguments{
@@ -28,7 +29,13 @@ is the live path's route (torp#250), where one match is far too small a
 training set and the nightly's season fit is reused instead.}
 
 \item{return_models}{Attach the models that scored the newest season as the
-\code{np_models} attribute, so the caller can save them.}
+\code{np_models} attribute, so the caller can save them. It also carries the
+field half-length (\code{half}) the scored rows were built with.}
+
+\item{half}{Field half-length for the scored disposals and contests. \code{NULL}
+estimates it from \code{chains}, which makes it depend on the batch (one match
+reads 74-85 where its season reads 78); the live path passes the season's
+value from the fit bundle (torp#308).}
 }
 \value{
 \code{match_id}, \code{display_order}, \code{p_hat}, \code{decision}, \code{surprise}.

@@ -36,8 +36,11 @@ set_arm <- function(on) {
   assignInNamespace("NP_TACKLE_STOPPAGE_SHARE", if (on) 0.5 else 0, ns = "torp")
   stopifnot(identical(torp:::NP_FREE_AGAINST_BLAME, on))
 }
-stopifnot(identical(torp:::NP_FREE_AGAINST_BLAME, FALSE), identical(torp:::NP_TACKLE_POOL_SHARE, 0),
-          identical(torp:::EPV_ENGINE, "v4"))
+# Historical gate (2026-11-25), run when these flags defaulted OFF. From v18
+# they default ON (and NP_NAMED_LOSER_SHARE = 1), so the old "production is
+# off" precondition no longer holds; set_arm() sets both arms explicitly, but
+# a re-run's baseline also carries named-loser blame, unlike the recorded run.
+stopifnot(identical(torp:::EPV_ENGINE, "v4"))
 
 for (s in SEASONS) {
   f_off <- file.path(OUT_DIR, sprintf("fat_pgd_off_%d.parquet", s))

@@ -39,8 +39,9 @@ exists; anything else is an error (the v2 and v3 engines were removed on
 returned frame as its \code{epv_engine} attribute and column.}
 
 \item{difficulty_terms}{v4 only: precomputed difficulty terms from
-\code{np_difficulty_terms_for_season()} (leak-safe). Fitted in-sample, with a
-warning, when \code{NULL}.}
+\code{np_difficulty_terms_for_season()} (leak-safe). When \code{NULL} and no
+\code{np_fit} is given, a one-season frame is fitted on the season before
+(\code{NP_DIFFICULTY_FIT}, torp#258).}
 
 \item{pre_match}{Pre-match forecasts (\code{match_id}, \code{home_win_prob},
 optional \code{source}) for the WPA ledger (\code{build_wpa_ledger()}); when

@@ -4,19 +4,31 @@
 \alias{.add_psv_to_game_ratings}
 \title{Add PSV and per-game TORP value to player game ratings}
 \usage{
-.add_psv_to_game_ratings(pgr, pstats_season, season, strict = FALSE)
+.add_psv_to_game_ratings(
+  pgr,
+  pstats_season,
+  season,
+  strict = FALSE,
+  history_stats = NULL
+)
 }
 \arguments{
 \item{pgr}{Output of \code{.compute_player_game_ratings()} for one season.}
 
 \item{pstats_season}{Player stats for the same season (\code{load_player_stats()}).}
 
-\item{season}{Season, for messages.}
+\item{season}{Season, for messages and for the history default.}
 
 \item{strict}{If \code{TRUE}, abort when PSV could not be computed, or left any
 row with an NA \code{psv}, instead of returning \code{pgr} without it. Default \code{FALSE}, which keeps the old behaviour
 of returning the EPV-only frame, but now says so immediately and tags the
 result (see Value).}
+
+\item{history_stats}{Player stats for the season BEFORE \code{season}, used only
+as history for the stat opponent adjustment (A162, v18: prior games only,
+seeded with last season, so opening rounds are not adjusted from nothing).
+\code{NULL} (default) loads \code{load_player_stats(season - 1)}; \code{FALSE} skips the
+seed (cold start). The history rows are dropped before PSV is computed.}
 }
 \value{
 \code{pgr} with psv/osv/dsv, their per-80 columns and torp_value(_p80)

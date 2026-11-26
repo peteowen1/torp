@@ -926,7 +926,7 @@ explain_player_game <- function(player_id, match_id, player_stats = NULL,
   tog_raw <- if ("tog" %in% names(row)) {
     as.numeric(row$tog)
   } else if ("time_on_ground_percentage" %in% names(row)) {
-    pmax(as.numeric(row$time_on_ground_percentage) / 100, 0.1)
+    .tog_weight(row$time_on_ground_percentage)
   } else 1
   tog_rate <- .psv_tog_rate(tog_raw)   # divisor for per-80 rates
   tog_val  <- .psv_tog_mult(tog_raw)   # per-game multiplier and display

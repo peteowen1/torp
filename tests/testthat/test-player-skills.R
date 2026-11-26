@@ -730,12 +730,16 @@ test_that("batch estimator agrees with the single-date estimator", {
 # dream_team_points / rating_points use 1 unit of exposure per row. The mock data
 # carries 2 availability-only rows per player (tog = 0, avail_only = TRUE).
 # STAT_RATE_NONTOG_EXCLUDE_UNPLAYED decides whether those rows count as exposure:
-# FALSE (published behaviour, held until the owner has walked real rows) counts
-# them, so a player's per-game rate is scaled by played / rostered = 8/10; TRUE
-# counts games played only.
+# FALSE (published up to v17) counts them, so a player's per-game rate is scaled
+# by played / rostered = 8/10; TRUE (from v18, Pete 2026-11-24) counts games
+# played only.
 
-test_that("non-TOG-adjusted exposure counts unplayed rows by default (B69 switch off)", {
-  expect_false(STAT_RATE_NONTOG_EXCLUDE_UNPLAYED)
+test_that("B69 switch is on from v18", {
+  expect_true(STAT_RATE_NONTOG_EXCLUDE_UNPLAYED)
+})
+
+test_that("non-TOG-adjusted exposure counts unplayed rows when the B69 switch is off (v17 behaviour)", {
+  testthat::local_mocked_bindings(STAT_RATE_NONTOG_EXCLUDE_UNPLAYED = FALSE)
   dat <- create_mock_stat_rating_data()
   expect_equal(sum(dat$avail_only), 20)  # 10 players x 2 missed rounds
   played <- dat[avail_only == FALSE, .(mean_dtp = mean(dream_team_points), n = .N), by = player_id]

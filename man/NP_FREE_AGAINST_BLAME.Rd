@@ -11,11 +11,11 @@ An object of class \code{logical} of length 1.
 NP_FREE_AGAINST_BLAME
 }
 \description{
-Test-version flag, off by default (Pete, 2026-11-25; plan
+On from rating vintage v18 (Pete, 2026-11-25, after a neutral gate; plan
 \code{docs/plans/NP-FREE-AGAINST-AND-TACKLES.md}). "Free Against" is a
-chains-only row, so today the debit stays with the teammate whose disposal
-came before it (2026 R0: Sam De Koning wears the free Jack Henry gave away).
-\code{TRUE} adds it to the \code{NP_ERROR_DESCS} route, so
+chains-only row, so with this off the debit stays with the teammate whose
+disposal came before it (2026 R0: Sam De Koning wears the free Jack Henry
+gave away). \code{TRUE} adds it to the \code{NP_ERROR_DESCS} route, so
 \code{NP_ERROR_BLAME_SHARE} of that debit moves to the player named on the
 Free Against row. It moves the recipient, never the amount.
 }

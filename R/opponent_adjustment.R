@@ -136,8 +136,8 @@ adjust_stat_ratings_for_opponents <- function(stat_ratings,
 #' @param prior_games Pseudo-games at league average for shrinkage.
 #' @param cap Floor/ceiling for adjustment factors.
 #' @param stat_defs Output of [stat_rating_definitions()]. If NULL, uses default.
-#' @param rolling Logical. If TRUE, computes causal rolling profiles (each game
-#'   uses only prior games for its opponent profile). If FALSE (default),
+#' @param rolling Logical. If TRUE (default), computes causal rolling profiles
+#'   (each game uses only prior games for its opponent profile). If FALSE,
 #'   computes a single snapshot profile at the latest date.
 #'
 #'   The snapshot is IN-SAMPLE: each team's conceded profile is built from
@@ -155,7 +155,7 @@ adjust_stats_for_opponents <- function(player_stats,
                                         prior_games = 5,
                                         cap = OPP_ADJ_FACTOR_CAP,
                                         stat_defs = NULL,
-                                        rolling = FALSE) {
+                                        rolling = TRUE) {
   if (is.null(stat_defs)) stat_defs <- stat_rating_definitions()
   dt <- data.table::as.data.table(player_stats)
 

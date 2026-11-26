@@ -248,5 +248,17 @@ season's mean PSV rises from 0.70 to 0.92 (669 players). Preserve v16 with
 \code{data-raw/03-ratings/promote_rating_vintage.R} (PROMOTE_FROM=v16,
 PROMOTE_TO=v17) and move the manifest to canonical v17 BEFORE this reaches
 main.
+
+v18 (2026-11-27): the v18 bundle (docs/plans/V18-BUNDLE.md). Net points
+prices each season on difficulty models fitted on the season before
+(torp#258); free kicks against, chains tackles and the beaten contest
+target are charged or paid (four NP flags on); the stat opponent adjustment
+uses prior games only, seeded with last season (A162); exact GAM
+predictions (torp#309); B69; 63 more constants tracked by the guard. The
+2021-2025 play-by-play is re-scored on the current EP/WP models
+(\code{c5cca7c569ff}; 2026 was already current and came out identical).
+Preserve v17 with \code{data-raw/03-ratings/promote_rating_vintage.R}
+(PROMOTE_FROM=v17, PROMOTE_TO=v18) and move the manifest to canonical v18
+BEFORE this reaches main.
 }
 \keyword{internal}
