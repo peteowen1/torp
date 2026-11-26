@@ -582,3 +582,10 @@ utils::globalVariables(c(
   "V_ret_hat", "V_trn_hat", "Va", "Va_cell", "Va_type", "val", "Vh", "Vh_cell",
   "Vh_type", "wmean", "xrapm.x", "xrapm.y", "yband"
 ))
+
+# Net Points chains-only rows (1.11.7-1.11.8): Free Against, chains tackles and
+# named-loser blame. Flagged by R CMD check on 2026-11-26.
+utils::globalVariables(c(
+  "i.target_pid", "c_target", "t_do", "tackle_pid", "tackle_team",
+  ".nl_share", ".nl_team", "i.nl_team"
+))

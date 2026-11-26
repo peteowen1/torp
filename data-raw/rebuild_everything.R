@@ -222,13 +222,9 @@ cli::cli_inform(paste0(
 
 # Helpers ----
 
-get_start_round <- function(season) {
-  if (season >= 2024) 0L else 1L
-}
+get_start_round <- function(season) torp:::.afl_first_round(season)
 
-get_max_round <- function(season) {
-  if (season == get_afl_season()) get_afl_week() else .afl_last_round(season)   # 29 in 2026
-}
+get_max_round <- function(season) torp:::.afl_max_round(season)   # 29 in 2026
 
 failures <- data.frame(label = character(), error = character(),
                        time = character(), stringsAsFactors = FALSE)

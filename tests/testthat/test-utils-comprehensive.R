@@ -491,3 +491,15 @@ test_that(".afl_last_round reads the season's last round from its fixtures", {
   expect_warning(expect_identical(.afl_last_round(2022), 27L), "Could not load fixtures")
   expect_warning(expect_identical(.afl_last_round(2025), 28L), "Could not load fixtures")
 })
+
+test_that(".afl_first_round() and .afl_max_round() hold the round-range rules", {
+  expect_identical(.afl_first_round(2023), 1L)
+  expect_identical(.afl_first_round(AFL_FIRST_ROUND_ZERO_SEASON), 0L)
+  expect_identical(.afl_first_round(2026), 0L)
+  local_mocked_bindings(get_afl_season = function(...) 2026L,
+                        get_afl_week = function(type = "current") if (type == "next") 12L else 11L,
+                        .afl_last_round = function(season) 28L, .package = "torp")
+  expect_identical(.afl_max_round(2026), 11L)            # this season: current week
+  expect_identical(.afl_max_round(2026, "next"), 12L)
+  expect_identical(.afl_max_round(2025), 28L)            # finished: fixtures' last round
+})
