@@ -88,8 +88,8 @@
 #' (docs/reviews/CODEBASE-REVIEW-2026-10-17.md in the torpverse repo) is that
 #' counting each of those unplayed rounds as a full unit of exposure deflates
 #' the per-game rate. Whether to count them is set by
-#' \code{STAT_RATE_NONTOG_EXCLUDE_UNPLAYED}: \code{FALSE} (the published
-#' behaviour) counts every row, \code{TRUE} counts played rows only.
+#' \code{STAT_RATE_NONTOG_EXCLUDE_UNPLAYED}: \code{FALSE} (published up to
+#' v17) counts every row, \code{TRUE} (from v18) counts played rows only.
 #'
 #' @param avail_only Logical vector, \code{TRUE} on availability-only rows.
 #' @param exclude_unplayed Whether unplayed rows get zero exposure.

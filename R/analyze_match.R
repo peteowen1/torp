@@ -156,7 +156,7 @@ get_player_game_ratings <- function(match = NULL,
   # --- Step 5: Add PSV/OSV/DSV from box-score stats ---
   ps_dt <- data.table::as.data.table(player_stats)
   if (!"tog" %in% names(ps_dt) && "time_on_ground_percentage" %in% names(ps_dt)) {
-    ps_dt[, tog := pmax(time_on_ground_percentage / 100, 0.1)]
+    ps_dt[, tog := .tog_weight(time_on_ground_percentage)]
   }
   if ("season" %in% names(player_epv) && !"season" %in% names(ps_dt)) {
     ps_dt[, season := season]

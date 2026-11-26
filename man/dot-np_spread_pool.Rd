@@ -29,4 +29,11 @@ normalised within each pool group -- so the choice of \code{spread} changes who 
 paid and never whether the ledger balances. That is what makes it safe to
 swap the rule later without re-proving the identity.
 }
+\details{
+DISPLAY-ONLY for published ratings: \code{.np_team_margin()} re-splits every
+pool afterwards, so the spread chosen here reaches \code{build_net_points()}'s raw
+ledger but not the published \verb{epv*} columns (measured 2026-11-26 on 2026
+rounds 0-4: changing \code{mirror_share} or the mirror map moved them at most
+5.8e-15).
+}
 \keyword{internal}

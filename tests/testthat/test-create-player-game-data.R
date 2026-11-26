@@ -21,7 +21,8 @@ test_that("create_player_game_data output contains required columns", {
           "Could not load required data")
 
   pgd <- tryCatch(
-    create_player_game_data(.shared$pbp, .shared$player_stats, .shared$teams),
+    create_player_game_data(.shared$pbp, .shared$player_stats, .shared$teams,
+                            chains = .shared$chains, difficulty_terms = .shared_np_terms()),
     error = function(e) NULL
   )
 
@@ -63,7 +64,8 @@ test_that("create_player_game_data *_adj columns are game-value scale (regressio
           "Could not load required data")
 
   pgd <- tryCatch(
-    create_player_game_data(.shared$pbp, .shared$player_stats, .shared$teams),
+    create_player_game_data(.shared$pbp, .shared$player_stats, .shared$teams,
+                            chains = .shared$chains, difficulty_terms = .shared_np_terms()),
     error = function(e) NULL
   )
   skip_if(is.null(pgd), "Could not create player game data")
@@ -204,7 +206,8 @@ test_that("the v4 engine sums to the margin in every match and fills the three c
           "Could not load required data")
   pgd <- tryCatch(
     suppressWarnings(create_player_game_data(.shared$pbp, .shared$player_stats, .shared$teams,
-                                             chains = .shared$chains, epv_engine = "v4")),
+                                             chains = .shared$chains, epv_engine = "v4",
+                                             difficulty_terms = .shared_np_terms())),
     error = function(e) NULL
   )
   skip_if(is.null(pgd), "Could not create v4 player game data")

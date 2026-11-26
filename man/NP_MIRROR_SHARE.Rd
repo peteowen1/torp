@@ -16,4 +16,10 @@ take a high share but not all. The remainder spreads across the rest of the
 on-field team by time on ground, so nobody takes all of it and nobody is
 wholly exempt.
 }
+\details{
+Display-only: it shapes \code{build_net_points()}'s raw ledger, but
+\code{.np_team_margin()} re-splits the pool before anything is published
+(0.5 vs 0 moved published EPV at most 5.3e-15 on 2026 rounds 0-4, measured
+2026-11-26).
+}
 \keyword{internal}

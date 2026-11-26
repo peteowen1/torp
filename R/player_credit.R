@@ -209,7 +209,7 @@ centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
       "{n_unmapped} player-game{?s} carr{?ies/y} an UNMAPPED {.field position_group} and {?was/were} left UNCENTRED at the EPV layer.")
   }
 
-  dt[, .ctog := pmax(dplyr::coalesce(time_on_ground_percentage / 100, 0.1), 0.1)]
+  dt[, .ctog := .tog_weight(time_on_ground_percentage)]   # v18: missing TOG = full game
 
   # Per-cell sufficient statistics, one channel at a time. Built as a table
   # rather than inside a by-group expression because the correction needs a
@@ -644,8 +644,9 @@ centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
 #'   returned frame as its \code{epv_engine} attribute and column.
 #'
 #' @param difficulty_terms v4 only: precomputed difficulty terms from
-#'   `np_difficulty_terms_for_season()` (leak-safe). Fitted in-sample, with a
-#'   warning, when `NULL`.
+#'   `np_difficulty_terms_for_season()` (leak-safe). When `NULL` and no
+#'   `np_fit` is given, a one-season frame is fitted on the season before
+#'   (`NP_DIFFICULTY_FIT`, torp#258).
 #' @param pre_match Pre-match forecasts (`match_id`, `home_win_prob`,
 #'   optional `source`) for the WPA ledger (`build_wpa_ledger()`); when
 #'   `NULL`, locked forecasts filled by retrodictions for the seasons in
@@ -1041,7 +1042,7 @@ create_player_game_data <- function(pbp_data = NULL,
   # position_group (6-way from PBP) which can be inconsistent with actual role.
   plyr_gm_df <- plyr_gm_df |>
     dplyr::mutate(
-      tog_safe = pmax(dplyr::coalesce(.data$time_on_ground_percentage / 100, 0.1), 0.1),
+      tog_safe = .tog_weight(.data$time_on_ground_percentage),
       epv_recv_p80 = .data$epv_recv / .data$tog_safe,
       epv_disp_p80 = .data$epv_disp / .data$tog_safe,
       epv_spoil_p80 = .data$epv_spoil / .data$tog_safe,

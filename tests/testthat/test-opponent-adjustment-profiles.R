@@ -261,3 +261,119 @@ test_that("the rolling and as-of implementations agree on the same prior window"
     a, tolerance = 1e-10
   )
 })
+
+# --- adjust_stats_for_opponents(): default is causal -------------------------
+
+test_that("adjust_stats_for_opponents() defaults to causal rolling profiles", {
+  # The snapshot (rolling = FALSE) builds each opponent's profile from every
+  # game including the one being adjusted. The default must not.
+  defs <- data.frame(stat_name = "disposals", type = "rate",
+                     source_col = "disposals", stringsAsFactors = FALSE)
+  d0 <- as.Date("2026-01-01")
+  mk <- function(m3) data.table::data.table(
+    player_id = paste0("P", 1:6),
+    match_id = c("M1", "M1", "M2", "M2", "M3", "M3"),
+    team     = c("A", "B", "C", "D", "A", "C"),
+    opponent = c("B", "A", "D", "C", "C", "A"),
+    match_date_rating = c(d0, d0, d0 + 7, d0 + 7, d0 + 14, d0 + 14),
+    disposals = c(10, 30, 20, 40, m3, m3)
+  )
+  factor_m3 <- function(dt, ...) {
+    out <- suppressMessages(adjust_stats_for_opponents(
+      dt, lambda_decay = 0, stat_defs = defs, ...))
+    out <- out[match_id == "M3" & team == "A"]
+    out$disposals_oadj / out$disposals
+  }
+
+  # Default == explicit rolling = TRUE.
+  expect_identical(factor_m3(mk(50)), factor_m3(mk(50), rolling = TRUE))
+  # Causal: the match being adjusted cannot move its own factor.
+  expect_equal(factor_m3(mk(50)), factor_m3(mk(5000)))
+  # The in-sample snapshot does move, which is the leak.
+  expect_false(isTRUE(all.equal(factor_m3(mk(50), rolling = FALSE),
+                                factor_m3(mk(5000), rolling = FALSE))))
+})
+
+# --- .adjust_stats_seeded(): last season seeds the causal profile (A162) ------
+
+test_that(".adjust_stats_seeded() uses last season as history and returns only this season", {
+  defs <- stat_rating_definitions()
+  col <- defs$source_col[defs$type == "rate"][1]
+  mk <- function(ids, teams, opps, dates, vals) {
+    d <- data.table::data.table(player_id = paste0("P", seq_along(ids)), match_id = ids,
+                                team = teams, opponent = opps, match_date_rating = dates)
+    d[[col]] <- vals
+    d
+  }
+  d0 <- as.Date("2025-04-01")
+  # 2025: C concedes a lot (A and B both pile it up against C).
+  hist <- mk(c("H1", "H1", "H2", "H2"), c("A", "C", "B", "C"), c("C", "A", "C", "B"),
+             c(d0, d0, d0 + 7, d0 + 7), c(40, 10, 40, 10))
+  # 2026 round 0: A plays C with no 2026 history at all.
+  cur <- mk(c("M1", "M1", "M2", "M2"), c("A", "C", "B", "D"), c("C", "A", "D", "B"),
+            rep(as.Date("2026-03-05"), 4), c(30, 20, 25, 25))
+
+  seeded <- suppressMessages(.adjust_stats_seeded(cur, 2026, history_stats = hist))
+  cold   <- suppressMessages(.adjust_stats_seeded(cur, 2026, history_stats = FALSE))
+
+  oadj <- paste0(col, "_oadj")
+  expect_true(oadj %in% names(seeded))
+  # Only this season's rows, in their original order, with this season's columns.
+  expect_identical(seeded$match_id, cur$match_id)
+  expect_identical(seeded$player_id, cur$player_id)
+  expect_false(".seed_row" %in% names(seeded))
+  expect_identical(setdiff(names(seeded), names(cur)), setdiff(names(cold), names(cur)))
+  # The opening round is adjusted from last season, not from nothing: A's
+  # figure against a leaky C is scaled down only when 2025 is seen.
+  a_seeded <- seeded[match_id == "M1" & team == "A"][[oadj]]
+  a_cold   <- cold[match_id == "M1" & team == "A"][[oadj]]
+  expect_false(isTRUE(all.equal(a_seeded, a_cold)))
+  expect_lt(a_seeded, a_cold)
+})
+
+test_that(".adjust_stats_seeded() refuses a degraded seed or adjustment under strict", {
+  defs <- stat_rating_definitions()
+  col <- defs$source_col[defs$type == "rate"][1]
+  cur <- data.table::data.table(player_id = c("P1", "P2"), match_id = "M1", team = c("A", "C"),
+                                opponent = c("C", "A"), match_date_rating = as.Date("2026-03-05"))
+  cur[[col]] <- c(30, 20)
+
+  # A failed history load: alert and cold start normally, abort under strict.
+  withr::local_envvar(VERSEBUS_STRICT = "")
+  local_mocked_bindings(load_player_stats = function(...) stop("network down"), .package = "torp")
+  expect_message(r <- .adjust_stats_seeded(cur, 2026), "network down")
+  expect_identical(r$player_id, cur$player_id)
+  expect_error(suppressMessages(.adjust_stats_seeded(cur, 2026, strict = TRUE)), "network down")
+
+  # An empty history frame is announced, not silently ignored.
+  expect_message(.adjust_stats_seeded(cur, 2026, history_stats = data.table::data.table()), "No 2025 player stats rows")
+  expect_error(suppressMessages(.adjust_stats_seeded(cur, 2026, history_stats = data.table::data.table(), strict = TRUE)),
+               "No 2025 player stats rows")
+
+  # An explicit FALSE skips the seed without complaint, even under strict.
+  expect_no_error(suppressMessages(.adjust_stats_seeded(cur, 2026, history_stats = FALSE, strict = TRUE)))
+
+  # The first season has nothing to seed from: announced, never an abort.
+  expect_no_error(suppressMessages(.adjust_stats_seeded(cur, AFL_MIN_SEASON, strict = TRUE)))
+
+  # An adjustment that returns no _oadj column is caught.
+  no_rate <- cur[, setdiff(names(cur), col), with = FALSE]
+  expect_error(suppressMessages(suppressWarnings(
+    .adjust_stats_seeded(no_rate, 2026, history_stats = FALSE, strict = TRUE))), "no adjusted columns")
+})
+
+test_that(".adjust_stats_seeded() obeys VERSEBUS_STRICT and survives braces in an error", {
+  defs <- stat_rating_definitions()
+  col <- defs$source_col[defs$type == "rate"][1]
+  cur <- data.table::data.table(player_id = c("P1", "P2"), match_id = "M1", team = c("A", "C"),
+                                opponent = c("C", "A"), match_date_rating = as.Date("2026-03-05"))
+  cur[[col]] <- c(30, 20)
+  local_mocked_bindings(load_player_stats = function(...) stop("bad {x} json"), .package = "torp")
+  # A brace in the error text is reported, not re-read as glue.
+  withr::local_envvar(VERSEBUS_STRICT = "")
+  expect_message(r <- .adjust_stats_seeded(cur, 2026), "bad {x} json", fixed = TRUE)
+  expect_identical(r$player_id, cur$player_id)
+  # The nightly sets VERSEBUS_STRICT=1 without passing strict: still fail closed.
+  withr::local_envvar(VERSEBUS_STRICT = "1")
+  expect_error(suppressMessages(.adjust_stats_seeded(cur, 2026)), "bad {x} json", fixed = TRUE)
+})

@@ -11,10 +11,9 @@ An object of class \code{numeric} of length 1.
 NP_TACKLE_STOPPAGE_SHARE
 }
 \description{
-Test-version flag, 0 (off) by default (Pete, 2026-11-25). When a chains-only
-"Tackle" row follows a stoppage, this share of the tackler's own side's
-\code{stoppage_pool} payment on that stoppage is paid to him by name,
-whatever its sign. Every other tackle is paid nothing. 0.5 is the decided
-value when on.
+0.5 from rating vintage v18 (Pete, 2026-11-25; 0 turns it off). When a
+chains-only "Tackle" row follows a stoppage, this share of the tackler's own
+side's \code{stoppage_pool} payment on that stoppage is paid to him by name,
+whatever its sign. Every other tackle is paid nothing.
 }
 \keyword{internal}

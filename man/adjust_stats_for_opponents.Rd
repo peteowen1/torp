@@ -10,7 +10,7 @@ adjust_stats_for_opponents(
   prior_games = 5,
   cap = OPP_ADJ_FACTOR_CAP,
   stat_defs = NULL,
-  rolling = FALSE
+  rolling = TRUE
 )
 }
 \arguments{
@@ -27,8 +27,8 @@ them from \code{home_team_name}, \code{away_team_name}, \code{team_status}.}
 
 \item{stat_defs}{Output of \code{\link[=stat_rating_definitions]{stat_rating_definitions()}}. If NULL, uses default.}
 
-\item{rolling}{Logical. If TRUE, computes causal rolling profiles (each game
-uses only prior games for its opponent profile). If FALSE (default),
+\item{rolling}{Logical. If TRUE (default), computes causal rolling profiles
+(each game uses only prior games for its opponent profile). If FALSE,
 computes a single snapshot profile at the latest date.
 
 The snapshot is IN-SAMPLE: each team's conceded profile is built from

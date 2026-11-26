@@ -22,5 +22,8 @@ equivalent from named duels. The assumed version is complete (every slot has
 a mirror) where the empirical one is only identified for defence-wins, and it
 needs no chains load. Swapping in empirical weights later changes only WHO is
 paid, never whether the ledger balances.
+
+Display-only for published ratings, like \code{NP_MIRROR_SHARE}: reversing
+the map moved published EPV at most 5.8e-15 on 2026 rounds 0-4 (2026-11-26).
 }
 \keyword{internal}

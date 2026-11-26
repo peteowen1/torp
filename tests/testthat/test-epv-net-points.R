@@ -1611,6 +1611,7 @@ test_that("NP_FREE_AGAINST_BLAME routes a teammate's Free Against through the er
     description = c("Handball", "Free Against", "Free For"),
     player_id = c("disposer", "offender", "opp"), team = c("A", "A", "B"),
     in_pbp = c(TRUE, FALSE, TRUE))
+  local_mocked_bindings(NP_FREE_AGAINST_BLAME = FALSE, .package = "torp")
   expect_equal(nrow(.np_error_actor(seq)), 0L)          # off: nothing moves
   local_mocked_bindings(NP_FREE_AGAINST_BLAME = TRUE, .package = "torp")
   e <- .np_error_actor(seq)
@@ -1619,6 +1620,9 @@ test_that("NP_FREE_AGAINST_BLAME routes a teammate's Free Against through the er
   expect_equal(e$err_desc, "Free Against")
 })
 
-test_that("NP_NAMED_LOSER_SHARE is off by default (flag-on path proven on real matches, commit 15d6c30a)", {
-  expect_identical(torp:::NP_NAMED_LOSER_SHARE, 0)
+test_that("v18 Net Points flags hold their decided values (flag-on paths proven on real matches, 15d6c30a / fbe97d35)", {
+  expect_identical(torp:::NP_NAMED_LOSER_SHARE, 1)
+  expect_identical(torp:::NP_FREE_AGAINST_BLAME, TRUE)
+  expect_identical(torp:::NP_TACKLE_POOL_SHARE, 0.5)
+  expect_identical(torp:::NP_TACKLE_STOPPAGE_SHARE, 0.5)
 })

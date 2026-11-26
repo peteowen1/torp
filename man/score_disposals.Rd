@@ -16,6 +16,11 @@ score_disposals(de, models)
 \code{recv_credit}.
 }
 \description{
-Score disposals and split the credit by difficulty
+Predicts with \code{discrete = FALSE}. The models are fitted with
+\code{bam(discrete = TRUE)}, and \code{predict.bam()} then defaults to
+discretising the NEW data on bins chosen from the batch once it passes about
+1,000 rows, so the same disposal would price differently in a season call and
+a one-match call (up to 0.02 on the logit scale, torp#308). The fit stays
+discrete; only the prediction is exact.
 }
 \keyword{internal}

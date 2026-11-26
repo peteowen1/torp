@@ -12,14 +12,16 @@ STAT_RATE_NONTOG_EXCLUDE_UNPLAYED
 }
 \description{
 dream_team_points and rating_points use one unit of exposure per row. With
-\code{FALSE} (the published behaviour) a round the player was rostered for
-but not selected still adds one unit of exposure with nothing in the
-numerator, so the per-game rate is deflated for anyone who misses rounds.
-With \code{TRUE} only games played count as exposure (finding B69 in
+\code{FALSE} (published up to rating vintage v17) a round the player was
+rostered for but not selected still adds one unit of exposure with nothing
+in the numerator, so the per-game rate is deflated for anyone who misses
+rounds. With \code{TRUE} (from v18; Pete decided 2026-11-24 after walking
+real rows) only games played count as exposure (finding B69 in
 docs/reviews/CODEBASE-REVIEW-2026-10-17.md of the torpverse repo; measured
-2025-26: 19,053 of 38,982 stat-rating rows are availability-only).
-Held at \code{FALSE} until the owner has walked real example rows; flipping
-it to \code{TRUE} is the whole change, and it moves the published
-dream_team_points_* and rating_points_* columns.
+2025-26: 19,053 of 38,982 stat-rating rows are availability-only). It moves
+the published dream_team_points_* and rating_points_* columns only: no PSR,
+OSR or DSR coefficient reads them (checked 2026-11-26), so TORP does not move.
+It is in \code{.rating_defining_constants()} all the same, so the vintage
+guard sees any change to it.
 }
 \keyword{internal}

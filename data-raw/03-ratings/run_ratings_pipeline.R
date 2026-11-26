@@ -678,7 +678,14 @@ for (s in seasons) {
     # a file blocks every AFL build; daily_release.R guards the same way. As
     # published on 2026-10-18 every season 2021-2026 had PSV on all rows.
     pstats_season <- data.table::as.data.table(all_pstats[all_pstats$season == s, ])
-    pgr <- .add_psv_to_game_ratings(pgr, pstats_season, s, strict = TRUE)
+    # Last season seeds the stat opponent adjustment (A162). Taken from
+    # all_pstats when this run loaded it; otherwise NULL makes the helper load
+    # it, and under strict a failed load aborts rather than starting cold.
+    pstats_prev <- if (any(all_pstats$season == s - 1L)) {
+      data.table::as.data.table(all_pstats[all_pstats$season == s - 1L, ])
+    } else NULL
+    pgr <- .add_psv_to_game_ratings(pgr, pstats_season, s, strict = TRUE,
+                                    history_stats = pstats_prev)
 
     file_name <- paste0("player_game_ratings_", s)
     save_to_release(pgr, torp:::.vintage_asset_stem(file_name, RATINGS_VINTAGE), "player_game_ratings-data")
