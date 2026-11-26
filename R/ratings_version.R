@@ -354,7 +354,12 @@
     EPV_RUCK_SWING_SCALE = EPV_RUCK_SWING_SCALE,
     EPV_WEIGHT_DECAY_DAYS = EPV_WEIGHT_DECAY_DAYS,
     # A real `loading` default (player_ratings.R, psr.R), at identity 1.0.
-    EPR_LOADING_DEFAULT = EPR_LOADING_DEFAULT
+    EPR_LOADING_DEFAULT = EPR_LOADING_DEFAULT,
+    # B69 (v18). Moves only the published dream_team_points_* and
+    # rating_points_* skill ratings, which no PSR/OSR/DSR coefficient reads, so
+    # TORP does not move -- wired anyway so a flip of a flag that changes
+    # published numbers is never invisible to the guard (review, 2026-11-26).
+    STAT_RATE_NONTOG_EXCLUDE_UNPLAYED = STAT_RATE_NONTOG_EXCLUDE_UNPLAYED
   )
 }
 

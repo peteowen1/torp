@@ -20,7 +20,8 @@ real rows) only games played count as exposure (finding B69 in
 docs/reviews/CODEBASE-REVIEW-2026-10-17.md of the torpverse repo; measured
 2025-26: 19,053 of 38,982 stat-rating rows are availability-only). It moves
 the published dream_team_points_* and rating_points_* columns only: no PSR,
-OSR or DSR coefficient reads them (checked 2026-11-26), so TORP does not move
-and this is not in \code{.rating_defining_constants()}.
+OSR or DSR coefficient reads them (checked 2026-11-26), so TORP does not move.
+It is in \code{.rating_defining_constants()} all the same, so the vintage
+guard sees any change to it.
 }
 \keyword{internal}

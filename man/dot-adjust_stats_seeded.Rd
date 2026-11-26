@@ -4,7 +4,12 @@
 \alias{.adjust_stats_seeded}
 \title{Opponent-adjust one season's player stats, seeded with last season}
 \usage{
-.adjust_stats_seeded(pstats_season, season, history_stats = NULL)
+.adjust_stats_seeded(
+  pstats_season,
+  season,
+  history_stats = NULL,
+  strict = FALSE
+)
 }
 \arguments{
 \item{pstats_season}{One season of player stats.}
@@ -12,16 +17,27 @@
 \item{season}{That season.}
 
 \item{history_stats}{Last season's player stats; \code{NULL} loads them, \code{FALSE}
-skips the seed.}
+skips the seed on purpose (no alert).}
+
+\item{strict}{Abort instead of degrading (see above).}
 }
 \value{
-\code{pstats_season}, opponent-adjusted. If the adjustment fails, the
-unadjusted input with an alert (PSV can still run on it).
+\code{pstats_season}, opponent-adjusted. Non-strict, a failed adjustment
+returns the unadjusted input with an alert (PSV can still run on it).
 }
 \description{
 A162 (v18): \code{adjust_stats_for_opponents()} now uses prior games only, so a
 season passed alone would adjust its opening rounds from no history at all.
 Last season's rows are added as history, the adjustment runs over both, and
 only this season's rows come back, in their original order.
+}
+\details{
+Every way the seed or the adjustment can fall short is announced when it
+happens, and aborts under \code{strict = TRUE} (the republish path), because each
+one changes published numbers without leaving an NA: no history, a history
+load that failed or came back empty, history that would not stack, an
+adjustment that errored, or one that returned no \verb{_oadj} column. The one
+expected cold start, a season with no earlier season (\code{season - 1} before
+\code{AFL_MIN_SEASON}), is announced and never aborts.
 }
 \keyword{internal}

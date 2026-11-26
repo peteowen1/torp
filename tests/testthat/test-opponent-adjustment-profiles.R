@@ -330,3 +330,33 @@ test_that(".adjust_stats_seeded() uses last season as history and returns only t
   expect_false(isTRUE(all.equal(a_seeded, a_cold)))
   expect_lt(a_seeded, a_cold)
 })
+
+test_that(".adjust_stats_seeded() refuses a degraded seed or adjustment under strict", {
+  defs <- stat_rating_definitions()
+  col <- defs$source_col[defs$type == "rate"][1]
+  cur <- data.table::data.table(player_id = c("P1", "P2"), match_id = "M1", team = c("A", "C"),
+                                opponent = c("C", "A"), match_date_rating = as.Date("2026-03-05"))
+  cur[[col]] <- c(30, 20)
+
+  # A failed history load: alert and cold start normally, abort under strict.
+  local_mocked_bindings(load_player_stats = function(...) stop("network down"), .package = "torp")
+  expect_message(r <- .adjust_stats_seeded(cur, 2026), "network down")
+  expect_identical(r$player_id, cur$player_id)
+  expect_error(suppressMessages(.adjust_stats_seeded(cur, 2026, strict = TRUE)), "network down")
+
+  # An empty history frame is announced, not silently ignored.
+  expect_message(.adjust_stats_seeded(cur, 2026, history_stats = data.table::data.table()), "No 2025 player stats rows")
+  expect_error(suppressMessages(.adjust_stats_seeded(cur, 2026, history_stats = data.table::data.table(), strict = TRUE)),
+               "No 2025 player stats rows")
+
+  # An explicit FALSE skips the seed without complaint, even under strict.
+  expect_no_error(suppressMessages(.adjust_stats_seeded(cur, 2026, history_stats = FALSE, strict = TRUE)))
+
+  # The first season has nothing to seed from: announced, never an abort.
+  expect_no_error(suppressMessages(.adjust_stats_seeded(cur, AFL_MIN_SEASON, strict = TRUE)))
+
+  # An adjustment that returns no _oadj column is caught.
+  no_rate <- cur[, setdiff(names(cur), col), with = FALSE]
+  expect_error(suppressMessages(suppressWarnings(
+    .adjust_stats_seeded(no_rate, 2026, history_stats = FALSE, strict = TRUE))), "no adjusted columns")
+})
