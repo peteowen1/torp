@@ -56,18 +56,6 @@ WP_TIME_SCALING <- 15
 #' @keywords internal
 MATCH_BLEND_WEIGHT <- 1.0
 
-#' Zero rain and wind for games under a closed roof
-#'
-#' Test-version flag, off by default (2026-11-15 full review, finding 1.4 /
-#' W12). The weather file holds the outside weather at the stadium, so a
-#' Docklands game (\code{is_roof}) can carry rain and wind the players never
-#' saw. \code{TRUE} sets the model features \code{log_wind} and
-#' \code{log_precip} to 0 on roofed rows, in training (\code{.build_team_mdl_df()})
-#' and in the matchup table alike; \code{wind_avg} / \code{precipitation_total}
-#' stay as recorded (display only). Decided on the rolling gate; Pete chooses.
-#' @keywords internal
-MATCH_ROOF_ZERO_WEATHER <- FALSE
-
 #' Phase groupings for match model position columns
 #' Maps lineup_position to broad phase categories
 #' @keywords internal

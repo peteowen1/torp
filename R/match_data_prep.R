@@ -1160,12 +1160,6 @@
       log_precip = log1p(precipitation_total)
     )
 
-  # Under a closed roof the outside rain and wind never reach the ground
-  # (review finding 1.4; MATCH_ROOF_ZERO_WEATHER, off by default). Only the
-  # model features are zeroed: wind_avg / precipitation_total stay as recorded
-  # (display only), so the median fill the matchup table copies is unchanged.
-  if (isTRUE(MATCH_ROOF_ZERO_WEATHER)) team_mdl_df <- .roof_zero_weather(team_mdl_df)
-
   cli::cli_inform("team_mdl_df: {nrow(team_mdl_df)} rows, {ncol(team_mdl_df)} cols")
   cli::cli_inform("Weather joined: {n_weather} of {nrow(team_mdl_df)} rows ({round(weather_pct, 1)}%) before imputation")
   if (length(weather_missing_by_venue) > 0) {
@@ -1243,18 +1237,4 @@
       team_mdl_df
     }
   )
-}
-
-#' Zero the rain and wind model features on roofed rows
-#'
-#' Used by `.build_team_mdl_df()` and the matchup table when
-#' `MATCH_ROOF_ZERO_WEATHER` is `TRUE`, so training and serving agree.
-#' @param df A frame with `is_roof`, `log_wind`, `log_precip`.
-#' @return `df` with `log_wind` and `log_precip` set to 0 where `is_roof`.
-#' @keywords internal
-.roof_zero_weather <- function(df) {
-  roof <- df$is_roof %in% TRUE
-  df$log_wind[roof] <- 0
-  df$log_precip[roof] <- 0
-  df
 }
