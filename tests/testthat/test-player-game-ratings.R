@@ -481,10 +481,10 @@ test_that(".add_psv_to_game_ratings strict also refuses a partial PSV gap", {
     adjust_stats_for_opponents = function(x) x,
     .package = "torp")
   stats <- data.frame(player_id = c("P1", "P2"), match_id = "M1", tog = 0.8)
-  r <- torp:::.add_psv_to_game_ratings(pgr, stats, 2025L)
+  r <- torp:::.add_psv_to_game_ratings(pgr, stats, 2025L, history_stats = FALSE)
   expect_equal(sum(is.na(r$psv)), 1L)
   expect_error(
-    torp:::.add_psv_to_game_ratings(pgr, stats, 2025L, strict = TRUE),
+    torp:::.add_psv_to_game_ratings(pgr, stats, 2025L, strict = TRUE, history_stats = FALSE),
     "PSV missing on 1 of 2 rows")
 })
 
@@ -495,12 +495,12 @@ test_that(".add_psv_to_game_ratings strict passes full coverage, refuses osv-onl
     .compute_psv = function(x) data.table::data.table(player_id = c("P1", "P2"), match_id = "M1", psv = c(2, 3)),
     adjust_stats_for_opponents = function(x) x,
     .package = "torp")
-  expect_no_error(r <- torp:::.add_psv_to_game_ratings(pgr, stats, 2025L, strict = TRUE))
+  expect_no_error(r <- torp:::.add_psv_to_game_ratings(pgr, stats, 2025L, strict = TRUE, history_stats = FALSE))
   expect_equal(r$psv, c(2, 3))
   local_mocked_bindings(
     .compute_psv = function(x) data.table::data.table(player_id = c("P1", "P2"), match_id = "M1", osv = c(1, 1)),
     .package = "torp")
   expect_error(
-    torp:::.add_psv_to_game_ratings(pgr, stats, 2025L, strict = TRUE),
+    torp:::.add_psv_to_game_ratings(pgr, stats, 2025L, strict = TRUE, history_stats = FALSE),
     "no psv column")
 })

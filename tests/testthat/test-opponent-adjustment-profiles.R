@@ -293,3 +293,40 @@ test_that("adjust_stats_for_opponents() defaults to causal rolling profiles", {
   expect_false(isTRUE(all.equal(factor_m3(mk(50), rolling = FALSE),
                                 factor_m3(mk(5000), rolling = FALSE))))
 })
+
+# --- .adjust_stats_seeded(): last season seeds the causal profile (A162) ------
+
+test_that(".adjust_stats_seeded() uses last season as history and returns only this season", {
+  defs <- stat_rating_definitions()
+  col <- defs$source_col[defs$type == "rate"][1]
+  mk <- function(ids, teams, opps, dates, vals) {
+    d <- data.table::data.table(player_id = paste0("P", seq_along(ids)), match_id = ids,
+                                team = teams, opponent = opps, match_date_rating = dates)
+    d[[col]] <- vals
+    d
+  }
+  d0 <- as.Date("2025-04-01")
+  # 2025: C concedes a lot (A and B both pile it up against C).
+  hist <- mk(c("H1", "H1", "H2", "H2"), c("A", "C", "B", "C"), c("C", "A", "C", "B"),
+             c(d0, d0, d0 + 7, d0 + 7), c(40, 10, 40, 10))
+  # 2026 round 0: A plays C with no 2026 history at all.
+  cur <- mk(c("M1", "M1", "M2", "M2"), c("A", "C", "B", "D"), c("C", "A", "D", "B"),
+            rep(as.Date("2026-03-05"), 4), c(30, 20, 25, 25))
+
+  seeded <- suppressMessages(.adjust_stats_seeded(cur, 2026, history_stats = hist))
+  cold   <- suppressMessages(.adjust_stats_seeded(cur, 2026, history_stats = FALSE))
+
+  oadj <- paste0(col, "_oadj")
+  expect_true(oadj %in% names(seeded))
+  # Only this season's rows, in their original order, with this season's columns.
+  expect_identical(seeded$match_id, cur$match_id)
+  expect_identical(seeded$player_id, cur$player_id)
+  expect_false(".seed_row" %in% names(seeded))
+  expect_identical(setdiff(names(seeded), names(cur)), setdiff(names(cold), names(cur)))
+  # The opening round is adjusted from last season, not from nothing: A's
+  # figure against a leaky C is scaled down only when 2025 is seen.
+  a_seeded <- seeded[match_id == "M1" & team == "A"][[oadj]]
+  a_cold   <- cold[match_id == "M1" & team == "A"][[oadj]]
+  expect_false(isTRUE(all.equal(a_seeded, a_cold)))
+  expect_lt(a_seeded, a_cold)
+})

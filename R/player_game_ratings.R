@@ -632,6 +632,60 @@ player_season_stats <- function(season_val = get_afl_season(),
   result[, intersect(col_order, names(result)), with = FALSE]
 }
 
+#' Opponent-adjust one season's player stats, seeded with last season
+#'
+#' A162 (v18): `adjust_stats_for_opponents()` now uses prior games only, so a
+#' season passed alone would adjust its opening rounds from no history at all.
+#' Last season's rows are added as history, the adjustment runs over both, and
+#' only this season's rows come back, in their original order.
+#'
+#' @param pstats_season One season of player stats.
+#' @param season That season.
+#' @param history_stats Last season's player stats; `NULL` loads them, `FALSE`
+#'   skips the seed.
+#' @return `pstats_season`, opponent-adjusted. If the adjustment fails, the
+#'   unadjusted input with an alert (PSV can still run on it).
+#' @keywords internal
+.adjust_stats_seeded <- function(pstats_season, season, history_stats = NULL) {
+  cur <- data.table::copy(data.table::as.data.table(pstats_season))
+  cur[, .seed_row := seq_len(.N)]
+  if (is.null(history_stats)) {
+    history_stats <- tryCatch(load_player_stats(season - 1L), error = function(e) {
+      cli::cli_alert_warning("No {season - 1L} player stats to seed the {season} opponent adjustment ({conditionMessage(e)}); opening rounds start cold.")
+      NULL
+    })
+  }
+  hist <- if (isFALSE(history_stats) || is.null(history_stats)) NULL else data.table::as.data.table(history_stats)
+  if (!is.null(hist) && nrow(hist) > 0) {
+    hist <- hist[!match_id %in% cur$match_id]
+    hist[, .seed_row := NA_integer_]
+    cli::cli_alert_info("Opponent adjustment for {season}: seeded with {format(nrow(hist), big.mark = ',')} player-games from {season - 1L} (A162)")
+  } else {
+    hist <- NULL
+  }
+  both <- tryCatch(data.table::rbindlist(list(hist, cur), use.names = TRUE, fill = TRUE),
+                   error = function(e) {
+    cli::cli_alert_warning("Could not stack {season - 1L} history onto {season} ({conditionMessage(e)}); opening rounds start cold.")
+    cur
+  })
+  adj <- tryCatch(adjust_stats_for_opponents(both), error = function(e) {
+    # Not fatal on its own (PSV can run on unadjusted stats), but it changes
+    # the numbers, so say so now.
+    cli::cli_alert_warning("Stat opponent adjustment failed for {season}: {conditionMessage(e)}; PSV uses unadjusted stats.")
+    NULL
+  })
+  if (is.null(adj)) return(data.table::as.data.table(pstats_season))
+  adj <- data.table::as.data.table(adj)[!is.na(.seed_row)]
+  if (nrow(adj) != nrow(cur)) {
+    cli::cli_abort("Seeded opponent adjustment returned {nrow(adj)} rows for {season}, expected {nrow(cur)}.")
+  }
+  data.table::setorder(adj, .seed_row)
+  adj[, .seed_row := NULL]
+  added <- setdiff(names(adj), names(both))   # what the adjustment itself adds
+  keep <- c(setdiff(names(cur), ".seed_row"), added)
+  adj[, intersect(keep, names(adj)), with = FALSE]
+}
+
 #' Add PSV and per-game TORP value to player game ratings
 #'
 #' `.compute_player_game_ratings()` builds the EPV side only. PSV (box-score
@@ -644,7 +698,12 @@ player_season_stats <- function(season_val = get_afl_season(),
 #'
 #' @param pgr Output of `.compute_player_game_ratings()` for one season.
 #' @param pstats_season Player stats for the same season (`load_player_stats()`).
-#' @param season Season, for messages.
+#' @param season Season, for messages and for the history default.
+#' @param history_stats Player stats for the season BEFORE `season`, used only
+#'   as history for the stat opponent adjustment (A162, v18: prior games only,
+#'   seeded with last season, so opening rounds are not adjusted from nothing).
+#'   `NULL` (default) loads `load_player_stats(season - 1)`; `FALSE` skips the
+#'   seed (cold start). The history rows are dropped before PSV is computed.
 #' @param strict If `TRUE`, abort when PSV could not be computed, or left any
 #'   row with an NA `psv`, instead of returning `pgr` without it. Default `FALSE`, which keeps the old behaviour
 #'   of returning the EPV-only frame, but now says so immediately and tags the
@@ -656,7 +715,8 @@ player_season_stats <- function(season_val = get_afl_season(),
 #'   pipeline should check that attribute (or pass `strict = TRUE`) before
 #'   publishing.
 #' @keywords internal
-.add_psv_to_game_ratings <- function(pgr, pstats_season, season, strict = FALSE) {
+.add_psv_to_game_ratings <- function(pgr, pstats_season, season, strict = FALSE,
+                                     history_stats = NULL) {
   psv_fail <- function(why) {
     # cli_warn() is deferred to the end of a long run, by which time the partial
     # frame has usually been published; an alert prints now.
@@ -679,12 +739,7 @@ player_season_stats <- function(season_val = get_afl_season(),
                              by = intersect(c("player_id", "match_id"), names(pstats_season)),
                              all.x = TRUE)
     }
-    pstats_season <- tryCatch(adjust_stats_for_opponents(pstats_season), error = function(e) {
-      # Not fatal on its own (PSV can run on unadjusted stats), but it changes
-      # the numbers, so say so now.
-      cli::cli_alert_warning("Stat opponent adjustment failed for {season}: {conditionMessage(e)}; PSV uses unadjusted stats.")
-      pstats_season
-    })
+    pstats_season <- .adjust_stats_seeded(pstats_season, season, history_stats)
     psv_err <- NULL
     psv_result <- tryCatch(.compute_psv(pstats_season), error = function(e) {
       psv_err <<- conditionMessage(e)
