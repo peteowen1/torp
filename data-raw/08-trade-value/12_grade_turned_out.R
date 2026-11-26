@@ -119,6 +119,16 @@ credit_player <- function(pid, cl, s_from, y) {
 
 # ---- 4. Grade each year ----
 drafts <- lapply(setNames(years, years), function(y) parse_wiki_draft(file.path(raw_dir, sprintf("wiki_%d_draft.html", y)), y))
+# Academy and father-son bids: "matched bid by X" names the bidder; the club
+# making the selection is the one that matched. 2021 also lists "used picks".
+bids <- rbindlist(lapply(years, function(Yd) {
+  d <- drafts[[as.character(Yd)]]$picks[grepl("matched bid", notes)]
+  d[, .(draft = Yd, bid_pick = pick, matcher = abbr(club), player,
+        used = fifelse(grepl("used picks?", notes), sub(".*used picks? ([0-9, and]+).*", "\\1", notes), NA_character_))]
+}))
+bm <- match_draft_names(bids[, .(row = .I, player)], all_names)
+bids[, player_id := bm$player_id[order(bm$row)]]
+cat("bids matched 2021-2025:", nrow(bids), "| bid players matched to a TORP player:", bids[!is.na(player_id), .N], "\n")
 grade_year <- function(y) {
   a <- copy(assets[[as.character(y)]])
   a[, `:=`(to = abbr(to_club), from = abbr(from_club))]
@@ -188,6 +198,36 @@ grade_year <- function(y) {
       }
     }
   }
+  # Picks spent matching a bid (Pete, 2026-11-26). A pick the receiving club
+  # held in a draft where it matched an academy or father-son bid, and that
+  # never became a selection, is taken as spent on that bid. Only the 2021
+  # page lists the picks used, so for every year it is inferred; the 2021 list
+  # checks the inference below. It is graded at its trade-time value scaled by
+  # how the club's bid players turned out against the curve at their bid
+  # picks: the club's own consumed picks are unknown, so no points split is
+  # attempted, and a bid player who has not played yet (2024-25) scales by 1.
+  un <- a[type != "player" & is.na(how) & draft %in% years, which = TRUE]
+  if (length(un)) {
+    bid_ratio <- function(Yd, cl) {
+      b <- bids[draft == Yd & matcher == cl]
+      if (!nrow(b)) return(NA_real_)
+      got <- exp <- 0
+      for (k in seq_len(nrow(b))) {
+        e <- pick_value(b$bid_pick[k]) * disc^(Yd - y)
+        if (is.na(b$player_id[k]) && Yd < 2024L) next
+        turned <- if (is.na(b$player_id[k])) e else {
+          cp <- credit_player(b$player_id[k], cl, Yd + 1L, y)
+          if (cp$seasons == 0 && Yd >= 2024L) e else cp$realised + cp$after
+        }
+        got <- got + turned; exp <- exp + e
+      }
+      if (exp > 0) got / exp else NA_real_
+    }
+    for (i in un) {
+      r <- bid_ratio(a$draft[i], a$to[i])
+      if (!is.na(r)) set(a, i, c("realised", "after", "how"), list(0, a$value[i] * r, "spent on a bid (inferred)"))
+    }
+  }
   a[type != "player" & is.na(how), how := "not traced"]
   a[how %in% c("not traced", "draft not yet held"), `:=`(realised = 0, after = value)]
   a[how == "no player match", `:=`(realised = 0, after = 0)]
@@ -216,6 +256,14 @@ all_g <- rbindlist(lapply(res, `[[`, "g"))
 
 # ---- 5. Anchors (chosen before looking) ----
 pick_rows <- all_a[type != "player" & draft <= 2025]
+# Check the bid inference where the page says which picks were used (2021 only).
+inf21 <- all_a[how == "spent on a bid (inferred)" & draft == 2021L]
+used21 <- bids[draft == 2021L & !is.na(used), .(matcher, n = as.integer(unlist(regmatches(used, gregexpr("[0-9]+", used))))), by = .I]
+inf21[, num := fifelse(!is.na(pick), as.integer(pick), NA_integer_)]
+cat("bid inference, 2021 check: inferred-spent picks", nrow(inf21), "| with a known number", inf21[!is.na(num), .N],
+    "| of those listed as used by that club:", inf21[!is.na(num), sum(paste(to, num) %in% used21[, paste(matcher, n)])], "\n")
+cat("spent on a bid (inferred):", pick_rows[how == "spent on a bid (inferred)", .N], "picks, at-the-time value",
+    round(pick_rows[how == "spent on a bid (inferred)", sum(value)], 1), "\n")
 anchors <- c(
   nets_sum_to_zero = all_g[, abs(sum(net_turned)) < 1e-6, by = year][, all(V1)],
   # By at-the-time value: most untraced picks are late ones spent matching a

@@ -59,7 +59,7 @@ out <- list(
   notes = list(
     # Reword after night one: the order is then no longer the 11 November one.
     order = sprintf("AFL final order, 11 November 2026 (%d picks). Compensation picks are added after night one.", n_order),
-    torp_value = "Expected eight-season TORP value of a player taken at the pick, discounted 10% a year.",
+    torp_value = "Expected eight-season TORP value of a player taken at the pick, discounted 10% a year. The shape of the curve is half our TORP fit and half career games by pick from the 1991-2015 drafts, so mid and late picks count for more than TORP alone gives them.",
     points = "Draft Value Index points (0 from pick 55).",
     bids = "Bid positions from Cal Twomey's Late Mail Phantom Draft (AFL.com.au, 18 November 2026), as the pick the bidding club starts the draft with. His top 30 has no bid on El Souki or Boi; they stay at 23 and 30 (30 is the first pick after Hawthorn's 29).",
     can_match = "The club can match if its shortfall is 412 points or less.",
