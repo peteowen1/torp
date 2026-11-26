@@ -1728,6 +1728,12 @@
 #' paid and never whether the ledger balances. That is what makes it safe to
 #' swap the rule later without re-proving the identity.
 #'
+#' DISPLAY-ONLY for published ratings: `.np_team_margin()` re-splits every
+#' pool afterwards, so the spread chosen here reaches `build_net_points()`'s raw
+#' ledger but not the published `epv*` columns (measured 2026-11-26 on 2026
+#' rounds 0-4: changing `mirror_share` or the mirror map moved them at most
+#' 5.8e-15).
+#'
 #' @param pool From `.np_defensive_pool()`.
 #' @param lineup Per-match roster with `position`, `tog`, `def_acts`.
 #' @param spread How a team pool is shared across the players on the ground:

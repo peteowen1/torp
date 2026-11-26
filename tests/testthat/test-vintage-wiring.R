@@ -123,14 +123,17 @@ KNOWN_NON_DEFINING <- c(
   # tracing the code rather than by summing a season total.
   "NP_RECEIVER_SHARE", "NP_BALL_WINNER_SHARE",
 
-  # -- STILL UNAUDITED. These five are the pool-SPREAD dials, a different
-  # sub-family from the stoppage pricing unit that was wired on 2026-09-10.
-  # Worth knowing before they are swept: production runs spread = "matchup"
-  # (build_net_points()'s match.arg default -- .np_engine_frame() never passes
-  # `spread`, traced 2026-09-10), so NP_MIRROR_SHARE and NP_POSITION_MIRROR are
-  # LIVE on every team pool, while NP_CONTEXT_WEIGHTS is read only under
-  # spread = "context" and therefore cannot move a published number today.
-  # None has been measured; that is the next audit session.
+  # -- The pool-SPREAD dials. Production runs spread = "matchup"
+  # (build_net_points()'s match.arg default; .np_engine_frame() never passes
+  # `spread`, traced 2026-09-10), so NP_MIRROR_SHARE and NP_POSITION_MIRROR
+  # are read on every team pool -- but MEASURED INERT on published numbers
+  # (2026-11-26, v18 item 7): on 2026 rounds 0-4 (1,655 player-games),
+  # NP_MIRROR_SHARE 0.5 -> 0 moves the published epv* columns at most
+  # 5.3e-15, and reversing NP_POSITION_MIRROR's map at most 5.8e-15, because
+  # .np_team_margin() re-splits the pool (see NP_STOPPAGE_LOSER_SHARE below).
+  # They move build_net_points()'s raw ledger only, so they stay, labelled
+  # display-only. NP_CONTEXT_WEIGHTS is read only under spread = "context".
+  # NP_DISPOSAL_DESCS and NP_EXCLUDED_DESCS are still unmeasured.
   "NP_MIRROR_SHARE", "NP_POSITION_MIRROR", "NP_CONTEXT_WEIGHTS",
   "NP_DISPOSAL_DESCS", "NP_EXCLUDED_DESCS",
   # -- MEASURED INERT, 2026-09-10, and the reason it can be trusted as inert

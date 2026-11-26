@@ -1822,6 +1822,11 @@ NP_RECEIVER_SHARE <- 0.30
 #' take a high share but not all. The remainder spreads across the rest of the
 #' on-field team by time on ground, so nobody takes all of it and nobody is
 #' wholly exempt.
+#'
+#' Display-only: it shapes \code{build_net_points()}'s raw ledger, but
+#' \code{.np_team_margin()} re-splits the pool before anything is published
+#' (0.5 vs 0 moved published EPV at most 5.3e-15 on 2026 rounds 0-4, measured
+#' 2026-11-26).
 #' @keywords internal
 NP_MIRROR_SHARE <- 0.50
 
@@ -1837,6 +1842,9 @@ NP_MIRROR_SHARE <- 0.50
 #' a mirror) where the empirical one is only identified for defence-wins, and it
 #' needs no chains load. Swapping in empirical weights later changes only WHO is
 #' paid, never whether the ledger balances.
+#'
+#' Display-only for published ratings, like \code{NP_MIRROR_SHARE}: reversing
+#' the map moved published EPV at most 5.8e-15 on 2026 rounds 0-4 (2026-11-26).
 #' @keywords internal
 NP_POSITION_MIRROR <- c(
   FF = "FB",   FB = "FF",
