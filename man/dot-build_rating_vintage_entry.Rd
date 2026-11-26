@@ -9,7 +9,8 @@
   version = RATING_VINTAGE,
   file = NULL,
   generated_utc = NULL,
-  defining_constants = .rating_defining_constants()
+  defining_constants = .rating_defining_constants(),
+  pbp_model_id = .lookup_pbp_model_id()
 )
 }
 \arguments{
@@ -33,6 +34,11 @@ the live constants describe the \emph{new} vintage — pass \code{NULL} there ra
 than stamping a definition the preserved data was not built under. A
 missing entry is a gap; a wrong one is a lie, and this manifest exists to
 be trusted.}
+
+\item{pbp_model_id}{Id of the EP/WP models the play-by-play under this
+vintage was scored by (\code{\link[=.lookup_pbp_model_id]{.lookup_pbp_model_id()}}). \code{NA} records none: pass
+it when preserving an outgoing vintage, for the same reason as
+\code{defining_constants = NULL}.}
 }
 \value{
 A named list describing this vintage.

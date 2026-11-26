@@ -382,21 +382,54 @@
 #'   than stamping a definition the preserved data was not built under. A
 #'   missing entry is a gap; a wrong one is a lie, and this manifest exists to
 #'   be trusted.
+#' @param pbp_model_id Id of the EP/WP models the play-by-play under this
+#'   vintage was scored by ([.lookup_pbp_model_id()]). `NA` records none: pass
+#'   it when preserving an outgoing vintage, for the same reason as
+#'   `defining_constants = NULL`.
 #' @keywords internal
 .build_rating_vintage_entry <- function(n_rows, version = RATING_VINTAGE,
                                         file = NULL, generated_utc = NULL,
-                                        defining_constants = .rating_defining_constants()) {
+                                        defining_constants = .rating_defining_constants(),
+                                        pbp_model_id = .lookup_pbp_model_id()) {
   if (is.null(generated_utc)) {
     generated_utc <- format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
   }
   if (is.null(file)) file <- .rating_vintage_file(if (identical(version, "v1")) NULL else version)
-  list(
+  entry <- list(
     file = file,
     torp_version = as.character(utils::packageVersion("torp")),
     generated_utc = generated_utc,
     rows = as.integer(n_rows),
     defining_constants = defining_constants
   )
+  # Not a defining constant: those are code values, and a key the published
+  # entries lack reads as drift. The models live in torpmodels, so they get
+  # their own field and their own check in check_vintage_alignment().
+  if (length(pbp_model_id) == 1 && !is.na(pbp_model_id)) entry$pbp_model_id <- as.character(pbp_model_id)
+  entry
+}
+
+#' The EP / WP model id a ratings run is built on
+#'
+#' The fingerprint of the published EP, WP and WP-calibration files
+#' ([.current_pbp_model_id()]), which score the play-by-play every rating is
+#' built from. A retrain moves every published rating, yet changes no constant,
+#' so the defining-constants check cannot see it (Pete 2026-11-27: a retrain
+#' must force a vintage bump, and the rebuild stays a hand step).
+#'
+#' Option `torp.pbp_model_id` overrides the lookup (the tests set it, so they
+#' never read torpmodels' manifest).
+#'
+#' @return The id, or `NA` (with a warning) when it cannot be read.
+#' @keywords internal
+.lookup_pbp_model_id <- function() {
+  ov <- getOption("torp.pbp_model_id")
+  if (!is.null(ov)) return(as.character(ov))
+  tryCatch(.current_pbp_model_id(), error = function(e) {
+    cli::cli_alert_warning(
+      "Could not read the published EP/WP model id: {conditionMessage(e)}")
+    NA_character_
+  })
 }
 
 #' Merge a vintage entry into an existing ratings manifest
@@ -439,6 +472,8 @@
 #'   outgoing vintage), so the entry carries an explicit gap rather than a
 #'   definition the data was never built under. See
 #'   \code{.build_rating_vintage_entry()}.
+#' @param pbp_model_id EP/WP model id to record; `NA` when preserving an
+#'   outgoing vintage (see \code{.build_rating_vintage_entry()}).
 #' @param manifest The manifest to merge into. Defaults to the published one.
 #'   Pass a list only to rebuild a lost manifest, together with
 #'   \code{allow_create = TRUE}.
@@ -451,6 +486,7 @@
 publish_ratings_manifest <- function(n_rows, version = RATING_VINTAGE,
                                      file = NULL, set_canonical = FALSE,
                                      defining_constants = .rating_defining_constants(),
+                                     pbp_model_id = .lookup_pbp_model_id(),
                                      manifest = read_ratings_manifest(),
                                      allow_create = FALSE) {
   if (is.null(manifest) && !isTRUE(allow_create)) {
@@ -460,7 +496,8 @@ publish_ratings_manifest <- function(n_rows, version = RATING_VINTAGE,
       "i" = "If the manifest is really gone, rebuild it deliberately with {.code allow_create = TRUE}."))
   }
   entry <- .build_rating_vintage_entry(n_rows, version = version, file = file,
-                                       defining_constants = defining_constants)
+                                       defining_constants = defining_constants,
+                                       pbp_model_id = pbp_model_id)
   manifest <- .merge_rating_manifest(manifest, version, entry)
   if (isTRUE(set_canonical)) manifest$canonical <- version
 
@@ -621,7 +658,7 @@ preserve_rating_vintage <- function(label, repo = get_torp_data_repo(),
   tryCatch(
     publish_ratings_manifest(n_rows = nrow(canon), version = label,
                              file = target, set_canonical = FALSE,
-                             defining_constants = NULL),
+                             defining_constants = NULL, pbp_model_id = NA_character_),
     error = function(e) {
       manifest_ok <<- FALSE
       # Include the condition class: this plumbing is new, so on its first real
@@ -768,7 +805,7 @@ read_ratings_manifest <- function() {
 #'
 #' The border check `preserve_rating_vintage()` and `publish_ratings_manifest()`
 #' set up but never enforced: this is the choke point that would have stopped
-#' the 2026-07-27/28 incident on day one. Three checks, each a distinct failure
+#' the 2026-07-27/28 incident on day one. Four checks, each a distinct failure
 #' mode:
 #'
 #' 1. The manifest itself must be readable (or the run must be non-strict and
@@ -780,6 +817,10 @@ read_ratings_manifest <- function() {
 #'    live constants after a JSON round-trip -- catching the subtler failure
 #'    where a rating-defining constant was edited without bumping
 #'    `RATING_VINTAGE`, so the label still matches while the maths changed.
+#' 4. The canonical vintage's recorded `pbp_model_id` must match the EP/WP
+#'    models published now. A retrain re-scores every play without touching a
+#'    constant, so check 3 cannot see it (Pete 2026-11-27). An entry with no
+#'    recorded id passes with a warning.
 #'
 #' @param strict If TRUE, an unreadable manifest or an undefined canonical
 #'   vintage aborts rather than warning. Defaults to `VERSEBUS_STRICT=1` via
@@ -799,13 +840,16 @@ read_ratings_manifest <- function() {
 #'   recommends. Still refused for a candidate: an unreadable manifest, and a
 #'   label equal to the canonical one, which is a canonical write wearing a
 #'   candidate flag.
+#' @param pbp_model_id The published EP/WP model id, or `NULL` to look it up
+#'   ([.lookup_pbp_model_id()]); injectable for tests.
 #' @return Invisibly, `list(aligned = TRUE, canonical = canon)` on success, or
 #'   `list(aligned = NA)` / `list(aligned = NA, canonical = canon)` when a
 #'   non-strict run grandfathers a gap it could not verify.
 #' @keywords internal
 check_vintage_alignment <- function(strict = .strict_mode(),
                                     manifest = read_ratings_manifest(),
-                                    candidate = NULL) {
+                                    candidate = NULL,
+                                    pbp_model_id = NULL) {
   branch <- Sys.getenv("GITHUB_REF_NAME", "local")
 
   if (is.null(manifest)) {
@@ -879,6 +923,35 @@ check_vintage_alignment <- function(strict = .strict_mode(),
       "Rating-defining constants have drifted from vintage {.val {canon}}'s published definition without a vintage bump (branch {.val {branch}}).",
       stats::setNames(lines, rep("x", length(lines)))
     ), class = "torp_error_vintage_constants_drift")
+  }
+
+  # 4. The EP/WP models. A retrain re-scores every play the ratings are built
+  # from without touching a constant, so check 3 is blind to it. An entry
+  # recorded before this check existed carries no id and is let through with a
+  # warning; the run's own manifest write then records it.
+  canon_models <- canon_entry$pbp_model_id
+  if (is.null(canon_models)) {
+    cli::cli_alert_warning(
+      "Vintage {.val {canon}} does not record the EP/WP models it was built on; this run's manifest write records them.")
+    return(invisible(list(aligned = TRUE, canonical = canon)))
+  }
+  live_models <- if (is.null(pbp_model_id)) .lookup_pbp_model_id() else pbp_model_id
+  if (is.na(live_models)) {
+    if (isTRUE(strict)) {
+      cli::cli_abort(c(
+        "Could not read which EP/WP models are published, so vintage {.val {canon}}'s models cannot be checked.",
+        "x" = "An unverifiable model set cannot license a production write (branch {.val {branch}})."
+      ), class = "torp_error_vintage_models_unreadable")
+    }
+    cli::cli_warn("Could not read which EP/WP models are published; skipping the model check (branch {.val {branch}}).")
+    return(invisible(list(aligned = NA, canonical = canon)))
+  }
+  if (!identical(as.character(canon_models), as.character(live_models))) {
+    cli::cli_abort(c(
+      "The published EP/WP models ({.val {live_models}}) are not the ones vintage {.val {canon}} was built on ({.val {canon_models}}) (branch {.val {branch}}).",
+      "x" = "A retrain re-scores every play, so ratings built now would mix models under one vintage label.",
+      "i" = "Re-score the play-by-play with {.file data-raw/03-ratings/rebuild_pbp_on_current_models.R}, then publish a new rating vintage."
+    ), class = "torp_error_vintage_models_drift")
   }
 
   invisible(list(aligned = TRUE, canonical = canon))

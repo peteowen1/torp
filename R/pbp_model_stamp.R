@@ -217,9 +217,10 @@ PBP_MODEL_UNSTAMPED <- "unstamped"
 
 #' Report seasons whose play-by-play is on old EP / WP models
 #'
-#' Report only (WPA-REFRESH-GUARD.md, PR 1): logs the stale seasons and never
-#' rebuilds. The 2021-2025 rebuild is part of rating vintage v18 (Pete,
-#' 2026-11-17).
+#' Report only, by design: logs the stale seasons and never rebuilds. A rebuild
+#' moves published ratings, so it is a hand step that ends in a new rating
+#' vintage (Pete 2026-11-27): `data-raw/03-ratings/rebuild_pbp_on_current_models.R`.
+#' The guard that forces it is check 4 of [check_vintage_alignment()].
 #'
 #' @param current_season Season year; seasons `AFL_MIN_SEASON` to this one are
 #'   checked.
@@ -240,7 +241,7 @@ PBP_MODEL_UNSTAMPED <- "unstamped"
   if (inherits(res, "error")) return("pbp_model_check")
   if (length(res)) {
     cli::cli_alert_warning(
-      "Play-by-play not on the current EP/WP models ({current_id}): {res}. Report only; nothing rebuilt.")
+      "Play-by-play not on the current EP/WP models ({current_id}): {res}. Report only; nothing rebuilt. Re-score with data-raw/03-ratings/rebuild_pbp_on_current_models.R, then publish a new rating vintage.")
   } else {
     cli::cli_alert_success("Every season's play-by-play is on the current EP/WP models ({current_id}).")
   }

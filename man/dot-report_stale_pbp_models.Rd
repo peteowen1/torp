@@ -18,8 +18,9 @@ check itself could not run, otherwise empty. Stale seasons are not a
 failure here.
 }
 \description{
-Report only (WPA-REFRESH-GUARD.md, PR 1): logs the stale seasons and never
-rebuilds. The 2021-2025 rebuild is part of rating vintage v18 (Pete,
-2026-11-17).
+Report only, by design: logs the stale seasons and never rebuilds. A rebuild
+moves published ratings, so it is a hand step that ends in a new rating
+vintage (Pete 2026-11-27): \code{data-raw/03-ratings/rebuild_pbp_on_current_models.R}.
+The guard that forces it is check 4 of \code{\link[=check_vintage_alignment]{check_vintage_alignment()}}.
 }
 \keyword{internal}
