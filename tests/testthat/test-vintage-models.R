@@ -72,6 +72,26 @@ test_that("unreadable published models abort under strict and warn otherwise", {
   expect_true(is.na(res$aligned))
 })
 
+test_that("the bootstrap check reads only seasons with play-by-play published", {
+  m <- mk_models_manifest(NA_character_)
+  # 1 Feb 2027, before round 1: 2021-2026 stamped, 2027 has nothing yet. The
+  # pre-game run must not read the new season as stale.
+  local_mocked_bindings(
+    .read_pbp_model_stamps = function() stats::setNames(as.list(rep("modelsB", 6)), 2021:2026),
+    get_afl_season = function(...) 2027L, .package = "torp")
+  expect_true(suppressMessages(check_vintage_alignment(strict = TRUE, manifest = m, pbp_model_id = "modelsB"))$aligned)
+  # One old season on other models still refuses.
+  local_mocked_bindings(
+    .read_pbp_model_stamps = function() c(stats::setNames(as.list(rep("modelsB", 5)), 2021:2025), list(`2026` = "modelsA")),
+    .package = "torp")
+  expect_error(check_vintage_alignment(strict = TRUE, manifest = m, pbp_model_id = "modelsB"),
+               class = "torp_error_vintage_models_drift")
+  # No stamps at all: unverifiable, refused.
+  local_mocked_bindings(.read_pbp_model_stamps = function() list(), .package = "torp")
+  expect_error(check_vintage_alignment(strict = TRUE, manifest = m, pbp_model_id = "modelsB"),
+               class = "torp_error_vintage_models_drift")
+})
+
 test_that("an unknown id never erases the recorded one on a manifest write", {
   old <- mk_models_manifest("modelsA")
   local_mocked_bindings(safe_release_upload = function(...) invisible(TRUE), .package = "torp")

@@ -960,8 +960,17 @@ check_vintage_alignment <- function(strict = .strict_mode(),
     # only truthful if the published play-by-play really is on those models, so
     # under strict the per-season stamps must agree before the run may write.
     if (isTRUE(strict) && !is.na(live_models)) {
-      stale <- if (is.null(stale_seasons)) .stale_pbp_seasons(live_models, .read_pbp_model_stamps(),
-                                   seq.int(AFL_MIN_SEASON, as.integer(get_afl_season()))) else stale_seasons
+      stale <- stale_seasons
+      if (is.null(stale)) {
+        # Only seasons with play-by-play published so far: a new season has no
+        # stamp until its first round is out, and its pre-game run must not
+        # read that as stale. No stamps at all checks 2021 alone, which fails:
+        # unverifiable is not a licence.
+        st <- .read_pbp_model_stamps()
+        last <- suppressWarnings(max(as.integer(names(st)), na.rm = TRUE))
+        if (!is.finite(last)) last <- AFL_MIN_SEASON
+        stale <- .stale_pbp_seasons(live_models, st, seq.int(AFL_MIN_SEASON, last))
+      }
       if (length(stale)) {
         cli::cli_abort(c(
           "Vintage {.val {canon}} records no EP/WP models, and the play-by-play for {.val {stale}} is not on the published models ({.val {live_models}}) (branch {.val {branch}}).",

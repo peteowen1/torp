@@ -147,8 +147,8 @@ tryCatch({
   for (s in seasons) {
     pbp <- arrow::read_parquet(f_new(s))
     save_to_release(pbp, paste0("pbp_data_", s, "_all"), "pbp-data")
+    done_pbp <- c(done_pbp, s)  # live from here, whatever the stamp does
     if (!isTRUE(.record_pbp_model_stamps(s, pbp))) stop(s, ": published, but its model stamp was not recorded")
-    done_pbp <- c(done_pbp, s)
     say(s, ": published ", nrow(pbp), " rows + stamp")
     rm(pbp); gc()
   }
