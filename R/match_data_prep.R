@@ -1156,10 +1156,6 @@
       humidity_avg = tidyr::replace_na(humidity_avg, stats::median(humidity_avg, na.rm = TRUE)),
       precipitation_total = tidyr::replace_na(precipitation_total, 0),
       is_roof = tidyr::replace_na(is_roof, FALSE),
-      # Under a closed roof the outside rain and wind never reach the ground
-      # (review finding 1.4; MATCH_ROOF_ZERO_WEATHER, off by default).
-      wind_avg = if (isTRUE(MATCH_ROOF_ZERO_WEATHER)) ifelse(is_roof, 0, wind_avg) else wind_avg,
-      precipitation_total = if (isTRUE(MATCH_ROOF_ZERO_WEATHER)) ifelse(is_roof, 0, precipitation_total) else precipitation_total,
       log_wind = log1p(wind_avg),
       log_precip = log1p(precipitation_total)
     )

@@ -535,7 +535,6 @@ update_player_stats <- function(season) {
 
   player_stats <- tryCatch({
     get_afl_player_stats(season) |>
-      dplyr::select(where(~ dplyr::n_distinct(.) > 1)) |>
       janitor::clean_names()
   }, error = function(e) {
     .record_skip(glue::glue("player_stats {season}"), e)
@@ -548,6 +547,8 @@ update_player_stats <- function(season) {
 
   # Normalise column names (strips v2 stats_ prefix, renames player/match IDs)
   player_stats <- .normalise_player_stats_columns(player_stats)
+  # A318: a fixed list, not 'constant in this fetch' (which dropped round_number after Opening Round)
+  player_stats <- .drop_unpublished_player_stats_columns(player_stats)
 
   # Ensure season column exists
   if (!"season" %in% names(player_stats)) {

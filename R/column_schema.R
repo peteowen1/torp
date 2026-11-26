@@ -606,6 +606,43 @@ XG_COL_MAP <- c(
   invisible(dt)
 }
 
+#' Player-stats columns the release never publishes (A318)
+#'
+#' The feed carries these in every season but they are empty or constant
+#' (measured on the 2025 and 2026 feeds, 2026-11-26: `captain` is always FALSE,
+#' the rest always NA). The publish paths used to drop any column with one
+#' distinct value IN THAT FETCH, which also dropped `round_number` whenever only
+#' the Opening Round had been played. A fixed list keeps the schema the same
+#' from run to run.
+#' @keywords internal
+PLAYER_STATS_UNPUBLISHED_COLS <- c(
+  "captain", "games_played", "super_goals", "ranking",
+  "goal_efficiency", "interchange_counts", "shot_efficiency"
+)
+
+#' Drop the fixed set of unpublished player-stats columns
+#'
+#' Run after [.normalise_player_stats_columns()] on the publish paths
+#' (`update_player_stats()` and the rebuild script). Says so if one of the
+#' columns turns out to be populated, since that would mean the feed changed.
+#' @param dt A data.table of normalised player stats.
+#' @return `dt` without those columns, invisibly (modified by reference).
+#' @keywords internal
+.drop_unpublished_player_stats_columns <- function(dt) {
+  if (!data.table::is.data.table(dt)) dt <- data.table::as.data.table(dt)
+  present <- intersect(PLAYER_STATS_UNPUBLISHED_COLS, names(dt))
+  populated <- present[vapply(present, function(c) {
+    v <- dt[[c]]
+    any(!is.na(v) & !(is.logical(v) & v %in% FALSE))
+  }, logical(1))]
+  if (length(populated) > 0) {
+    message("Player stats: dropping columns that are now populated in the feed (A318 list may need updating): ",
+            paste(populated, collapse = ", "))
+  }
+  if (length(present) > 0) dt[, (present) := NULL]
+  invisible(dt)
+}
+
 
 # ============================================================================
 # Shared two-step normaliser

@@ -1,3 +1,9 @@
+# torp 1.11.9
+
+* Player stats now drop a fixed list of always-empty columns (`PLAYER_STATS_UNPUBLISHED_COLS`, internal) instead of every column that is constant in the fetch. The old rule dropped `round_number` after the Opening Round, and the published `player_stats_<season>` schema could change from run to run. A listed column that becomes populated is reported, not silently dropped. Full-season output is unchanged.
+* `data-raw/rebuild_all_release_data.R` is folded into `data-raw/rebuild_everything.R`: Phase 2 scores the chains it just fetched, Phase 8 honours the season range (a partial range upserts those seasons) and copies ratings-pipeline failures into the run's failure log, and rebuilt per-game ratings carry PSV. New `--skip-derived`, `--skip-ratings` and `--skip-predictions` flags.
+* `MATCH_ROOF_ZERO_WEATHER` (added in 1.11.8, off) is removed: zeroing rain and wind under the Docklands roof made the match model slightly worse on the rolling gate. Published numbers are unchanged.
+
 # torp 1.11.8
 
 * `match_gams.rds` shrinks from 66 MB to 6 MB: `.strip_gam()` now resets the formula environments that `bam(discrete = TRUE)` kept pointing at the training frame (new internal `.reset_formula_envs()`). Predictions are identical. New test-version flags, both off by default: `NP_NAMED_LOSER_SHARE` (a kick lost at a contest charges the beaten target) and `MATCH_ROOF_ZERO_WEATHER` (no outside rain or wind under a closed roof). `ladder.R` and `simulate_match.R` use `.wp_from_margin()`, and `epv_opponent_adjustment.R` and `player_ratings.R` use `.tog_weight()`, with identical results. New gate script `data-raw/04-analysis/run_epr_gate_named_loser.R`. Published numbers are unchanged.

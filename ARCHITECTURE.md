@@ -559,7 +559,7 @@ Old parquet files with legacy column names are normalised automatically at load 
 | Stage | Directory | Key Script | Purpose |
 |-------|-----------|------------|---------|
 | 01 | `data-raw/01-data/` | `daily_release.R` | Daily data refresh, `has_new_games()` check, parquet release |
-| 01 | `data-raw/01-data/` | `rebuild_all_release_data.R` | Full rebuild of all torpdata releases from scratch |
+| 00 | `data-raw/` | `rebuild_everything.R` | Full rebuild of all torpdata releases (and models) from scratch; `--skip-models --skip-skills --skip-predictions --skip-sim` for data only |
 | 01 | `data-raw/01-data/` | `create_aggregated_files.R` | Build aggregated parquet files across seasons |
 | 01 | `data-raw/01-data/` | `get_weather_data.R` | Backfill historical weather via Open-Meteo API |
 | 01 | `data-raw/01-data/` | `get_stadium_data.R` | Stadium lat/lon reference data |
