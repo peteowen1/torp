@@ -209,7 +209,7 @@ centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
       "{n_unmapped} player-game{?s} carr{?ies/y} an UNMAPPED {.field position_group} and {?was/were} left UNCENTRED at the EPV layer.")
   }
 
-  dt[, .ctog := pmax(dplyr::coalesce(time_on_ground_percentage / 100, 0.1), 0.1)]
+  dt[, .ctog := .tog_weight(time_on_ground_percentage)]   # v18: missing TOG = full game
 
   # Per-cell sufficient statistics, one channel at a time. Built as a table
   # rather than inside a by-group expression because the correction needs a
@@ -1041,7 +1041,7 @@ create_player_game_data <- function(pbp_data = NULL,
   # position_group (6-way from PBP) which can be inconsistent with actual role.
   plyr_gm_df <- plyr_gm_df |>
     dplyr::mutate(
-      tog_safe = pmax(dplyr::coalesce(.data$time_on_ground_percentage / 100, 0.1), 0.1),
+      tog_safe = .tog_weight(.data$time_on_ground_percentage),
       epv_recv_p80 = .data$epv_recv / .data$tog_safe,
       epv_disp_p80 = .data$epv_disp / .data$tog_safe,
       epv_spoil_p80 = .data$epv_spoil / .data$tog_safe,

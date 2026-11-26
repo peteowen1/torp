@@ -60,7 +60,7 @@ verify_epv_level_centring <- function(pgd,
     season = pgd[["season"]][keep],
     round = pgd[["round"]][keep],
     pos_bucket = pos_bucket[keep],
-    w = pmax(dplyr::coalesce(pgd[["time_on_ground_percentage"]][keep] / 100, 0.1), 0.1))
+    w = .tog_weight(pgd[["time_on_ground_percentage"]][keep]))   # same weight as the centring
 
   # Fail CLOSED. `worst` starts at 0 and is only ever RAISED, so if every cell
   # is empty -- position_group missing or renamed, or every value unmapped --
