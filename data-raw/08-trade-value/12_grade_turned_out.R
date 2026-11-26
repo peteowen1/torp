@@ -119,6 +119,13 @@ credit_player <- function(pid, cl, s_from, y) {
 
 # ---- 4. Grade each year ----
 drafts <- lapply(setNames(years, years), function(y) parse_wiki_draft(file.path(raw_dir, sprintf("wiki_%d_draft.html", y)), y))
+# Hand-traced picks (see the pick loop in grade_year()).
+hand_path <- "data-raw/08-trade-value/hand_pick_trace.csv"
+hand <- if (file.exists(hand_path)) fread(hand_path, colClasses = list(character = c("item", "outcome", "confidence"))) else
+  data.table(trade_year = integer(), draft_year = integer(), trade = integer(), to_club = character(),
+             item = character(), final_pick = integer(), outcome = character(), confidence = character())
+hand[, to := abbr(to_club)]
+cat("hand-traced pick rows:", nrow(hand), "| high/medium:", hand[confidence %in% c("high", "medium"), .N], "\n")
 # Academy and father-son bids: "matched bid by X" names the bidder; the club
 # making the selection is the one that matched. 2021 also lists "used picks".
 bids <- rbindlist(lapply(years, function(Yd) {
@@ -137,7 +144,7 @@ grade_year <- function(y) {
   a <- copy(assets[[as.character(y)]])
   a[, `:=`(to = abbr(to_club), from = abbr(from_club))]
   a[, `:=`(v_turned = NA_real_, realised = NA_real_, after = NA_real_, how = NA_character_,
-           draftee = NA_character_, final_pick = NA_integer_)]
+           draftee = NA_character_, final_pick = NA_integer_, hand = FALSE)]
   # Players.
   a[type == "player" & is.na(player_id), player_id := moves[year == y & item %in% .BY$item, player_id[1]], by = item]
   for (i in a[type == "player" & !is.na(player_id), which = TRUE]) {
@@ -181,6 +188,43 @@ grade_year <- function(y) {
         }
       }
     }
+    # Hand-traced picks (Pete, 2026-11-26): picks the notes do not trace,
+    # read one by one against the AFL's final draft order articles
+    # (hand_pick_trace.csv, raw pages in trades_past/draft_order_raw/). Only
+    # high and medium confidence rows are used, and only where the draft page
+    # agrees: for "used", the selection at that number must be the receiving
+    # club's. "spent on bid" is left to the bid rule below; "passed" (high
+    # confidence only) is worth 0.
+    hrows <- hand[trade_year == y & draft_year == Yd & confidence %in% c("high", "medium")]
+    for (h in seq_len(nrow(hrows))) {
+      hr <- hrows[h]
+      i <- a[type != "player" & draft == Yd & is.na(how) & is.na(draftee) & trade == hr$trade &
+               to == hr$to & item == hr$item, which = TRUE]
+      if (length(i) != 1) next
+      # "passed" zeroes the pick, so it needs an explicit source line (high),
+      # not an inference from the pick being absent from the draft table.
+      if (hr$outcome == "passed" && hr$confidence == "high") {
+        set(a, i, c("realised", "after", "how", "hand"), list(0, 0, "passed (hand-traced)", TRUE)); next
+      }
+      if (!hr$outcome %in% c("used", "traded on") || is.na(hr$final_pick)) next
+      sel <- dr$picks[pick == hr$final_pick]
+      if (nrow(sel) != 1) next
+      set(a, i, c("final_pick", "hand"), list(hr$final_pick, TRUE))
+      if (hr$outcome == "used" && abbr(sel$club) == a$to[i]) {
+        set(a, i, "draftee", sel$player)
+      } else if (hr$outcome == "traded on" && grepl("matched bid", sel$notes)) {
+        # Passed on, then spent by another club matching a bid: final_pick is
+        # the bid's number, not the pick's own slot, so it keeps its trade-day value.
+        set(a, i, c("realised", "after", "how"), list(0, a$value[i], "traded on, then spent on a bid (hand-traced)"))
+      } else if (hr$outcome == "traded on" && abbr(sel$club) != a$to[i]) {
+        set(a, i, c("realised", "after", "how"),
+            list(0, pick_value(hr$final_pick) * disc^(Yd - y), "pick traded on (hand-traced)"))
+      } else {
+        set(a, i, c("final_pick", "hand"), list(NA_integer_, FALSE))
+        message(sprintf("  hand trace disagrees with the draft page: %d trade %s %s, pick %d is %s's",
+                        y, hr$trade, hr$item, hr$final_pick, sel$club))
+      }
+    }
   }
   # Draftees, valued as players from their first season.
   dd <- a[!is.na(draftee), which = TRUE]
@@ -202,6 +246,7 @@ grade_year <- function(y) {
       }
     }
   }
+  a[hand %in% TRUE & !grepl("hand-traced", how), how := paste(how, "(hand-traced)")]
   # Picks spent matching a bid (Pete, 2026-11-26). A pick the receiving club
   # held in a draft where it matched an academy or father-son bid, and that
   # never became a selection, is taken as spent on that bid. Only the 2021
