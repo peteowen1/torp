@@ -257,12 +257,13 @@ function clubTable() {
 
 // What became of an asset, for the as-it-turned-out view.
 function turnedSub(a) {
-  const h = a.how || "", yr = (h.match(/traded on (\d{4})/) || [])[1];
+  // Labels may end " (hand-traced)" (12, 2026-11-26): read the base label.
+  const h = (a.how || "").replace(" (hand-traced)", ""), yr = (h.match(/traded on (\d{4})/) || [])[1];
   const fate = h.endsWith("still there") ? `, still there: forecast for the rest`
     : yr ? `, traded on in ${yr}: his value then`
     : h.endsWith("left") ? ", then left" : "";
   const became = a.drafted ? `became ${esc(a.drafted)} (pick ${a.fp}); ` : "";
-  if (h.replace(" (hand-traced)", "") === "pick traded on") return `traded on; finally used at pick ${a.fp}`;
+  if (h === "pick traded on") return `traded on; finally used at pick ${a.fp}`;
   if (h === "not traced") return "not traced to a draftee; value at the time";
   if (h === "draft not yet held") return "draft not held yet; value at the time";
   if (h === "no player match") return "no rating found; counted as 0";
