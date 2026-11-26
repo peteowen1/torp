@@ -234,13 +234,7 @@ has_new_team_data <- function() {
 #'
 #' @param season Season year
 #' @return Integer round number
-get_max_round <- function(season) {
-  current_season <- get_afl_season()
-  if (season == current_season) {
-    return(get_afl_week())
-  }
-  .afl_last_round(season)   # from fixtures: 28 until 2025, 29 in 2026
-}
+get_max_round <- function(season) torp:::.afl_max_round(season)   # fixtures: 28 until 2025, 29 in 2026
 
 #' Get Starting Round for a Season
 #'
@@ -248,12 +242,7 @@ get_max_round <- function(season) {
 #'
 #' @param season Season year
 #' @return Integer round number
-get_start_round <- function(season) {
-  if (season >= 2024) {
-    return(0)
-  }
-  return(1)
-}
+get_start_round <- function(season) torp:::.afl_first_round(season)
 
 # Seasonal Data Update Functions (chains + PBP) ----
 # All data stored as _all files (one per season). New rounds are merged into
