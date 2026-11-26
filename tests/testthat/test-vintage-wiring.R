@@ -29,82 +29,23 @@
 # ---------------------------------------------------------------------------
 
 # Rating-defining-family constants (scanned below) that
-# .rating_defining_constants() does not capture.
+# .rating_defining_constants() does not capture: measured inert on published
+# numbers, never read into arithmetic, or (NP_DISPOSAL_DESCS,
+# NP_EXCLUDED_DESCS) still unmeasured.
 #
-# Registering these is NOT a claim they are safe to change. Several read TRUE
-# / non-default TODAY and are directly applied in run_ratings_pipeline.R Stage
-# 3 (EPR_POSITION_CENTRE, EPV_LEVEL_CENTRE, PSR_CENTRE_BY_ROUND,
-# PSR_POSITION_STANDARDISE, EPV_HITOUT_CENTRE_ON_RUCK, EPV_POINTS_SCALE) --
-# changing any of them changes every historical rating with no vintage bump
-# and no trace in ratings_manifest.json. This is a pre-existing gap in
-# D-DEF3's original wiring (`.rating_defining_constants()` only ever captured
-# the blend weight, the two v2 standardisation flags and the EPR
-# decay/prior/rate family), surfaced by writing this scan rather than created
-# by it, and widening what the manifest captures is explicitly out of scope
-# for FABLE-VINTAGE-GUARD-PLAN ("Out of scope: Any change to what counts as a
-# defining constant"). Fixing it is a separate, deliberate change -- queued,
-# not silently absorbed here.
+# Until 2026-11-26 this also held 63 constants it called rating-defining (the
+# raw EPV per-event weights, the EPR/EPV/PSR centring and shrink flags, the
+# points-scale family and EPR_LOADING_DEFAULT), registered on 2026-08-09
+# because widening the manifest was out of scope for FABLE-VINTAGE-GUARD-PLAN.
+# v18 item (3) wired all of them; see the block at the end of
+# .rating_defining_constants(). What remains here is not a backlog.
 KNOWN_NON_DEFINING <- c(
-  # -- Raw EPV per-event assignment weights: the constants that directly
-  # compute epv_recv/epv_disp/epv_spoil/epv_hitout in add_epv_vars(). Each one
-  # genuinely IS rating-defining; none is threaded into the manifest. (2026-08-09)
-  "EPV_BOUNCE_WT", "EPV_DISP_NEG_OFFSET", "EPV_DISP_POS_OFFSET", "EPV_DISP_SCALE",
-  "EPV_RECV_NEG_MULT", "EPV_RECV_NEG_OFFSET", "EPV_RECV_POS_MULT", "EPV_RECV_POS_OFFSET",
-  "EPV_RECV_SCALE", "EPV_RECV_INTERCEPT_MARK_SCALE", "EPV_RECV_FAILED_CONTEST_WT",
-  "EPV_SPOIL_WT", "EPV_TACKLE_WT", "EPV_PRESSURE_WT", "EPV_DEF_PRESSURE_WT",
-  "EPV_HITOUT_WT", "EPV_HITOUT_ADV_WT", "EPV_RUCK_CONTEST_WT",
-  "EPV_CONTESTED_POSS_WT", "EPV_CONTESTED_MARKS_WT", "EPV_GROUND_BALL_GETS_WT",
-  "EPV_MARKS_INSIDE50_WT", "EPV_INSIDE50S_WT", "EPV_CLANGERS_WT",
-  "EPV_SCORE_INVOLVEMENTS_WT", "EPV_INTERCEPTS_WT", "EPV_ONE_PERCENTERS_WT",
-  "EPV_REBOUND50S_WT", "EPV_FREES_AGAINST_WT", "EPV_FREES_FOR_WT", "EPV_GOALS_WT",
-  "EPV_BEHINDS_WT", "EPV_MARKS_WT", "EPV_UNCONTESTED_POSS_WT", "EPV_SHOTS_AT_GOAL_WT",
-  "EPV_KICKS_WT", "EPV_HANDBALLS_WT", "EPV_METRES_GAINED_WT", "EPV_TURNOVERS_WT",
-  "EPV_GOAL_ASSISTS_WT",
-
-  # -- Position centring / standardisation / shrink flags at the EPR, EPV and
-  # PSR layers. Several are live TRUE today and directly gate blocks in
-  # run_ratings_pipeline.R Stage 3 (EPR_POSITION_CENTRE, EPV_LEVEL_CENTRE,
-  # PSR_CENTRE_BY_ROUND, PSR_POSITION_STANDARDISE, EPV_HITOUT_CENTRE_ON_RUCK).
-  # Same gap as above. (2026-08-09)
-  "EPR_POSITION_CENTRE", "EPR_POSITION_SHRINK", "EPR_POSITION_SHRINK_PRIOR",
-  "EPR_CENTRE_CHANNELS", "EPV_LEVEL_CENTRE", "EPV_LEVEL_CENTRE_CHANNELS",
-  "EPV_POSITION_SHRINK", "EPV_POSITION_SHRINK_RULE", "EPV_POSITION_SHRINK_FLOOR",
-  "EPV_POSITION_SHRINK_PRIOR", "EPV_HITOUT_CENTRE_ON_RUCK", "EPV_RUCK_INVOLVEMENT_MIN",
-  "EPV_RUCK_BLEND_WIDTH", "PSR_CENTRE_BY_ROUND", "PSR_CENTRE_ON_LISTED",
-  "PSR_POSITION_STANDARDISE", "PSR_PRIOR_RATE",
-
-  # -- Points-scale / conversion / recency-decay constants applied at the
-  # value layer. EPV_POINTS_SCALE is live per its own docstring ("Applied at
-  # the VALUE layer so it flows into the rating"); EPV_WEIGHT_DECAY_DAYS feeds
-  # add_epv_vars()'s recency weighting directly. EPV_RUCK_SWING_SCALE is
-  # currently =1 ("1 = production... NOT applied" per its docstring) but is
-  # registered rather than assumed permanently inert -- flipping it would be
-  # exactly this kind of silent change. (2026-08-09)
-  "EPV_POINTS_SCALE", "EPV_PER_CHANNEL_POINTS_SCALE", "EPV_CHANNEL_SCALE_KEYS",
-  "EPV_RUCK_SWING_SCALE", "EPV_WEIGHT_DECAY_DAYS",
-
-  # -- EPV_ENGINE and EPV_CONT_LOSS_ALLOC sat here until 2026-08-18, deferred on
-  # the entry's own stated grounds: flipping the engine "changes every published
-  # rating and would need both its own vintage bump AND its own wiring into
-  # .rating_defining_constants() -- a known limitation for when v3 ships".
-  # v3 has now shipped, so both are wired and this entry is pruned rather than
-  # carried forward. While they sat here the drift guard was blind to the
-  # largest rating-defining change available: an engine flip produced
-  # byte-identical defining_constants and passed the check unremarked.
-  #
-  # STILL UNRESOLVED, recorded rather than left implicit: the EPR_DECAY and
-  # EPR_PRIOR_* leaves are captured under v2's recv/disp/spoil/hitout channel
-  # names, so a v3 vintage records its priors under v2's labels. The VALUES are
-  # captured and drift is still detected -- only the naming is stale.
-
-
-  # -- Legacy/derived, not independent degrees of freedom.
-  # EPR_DECAY_DEFAULT_DAYS is a straight alias (`<- EPR_DECAY_RECV`), so its
-  # value can never differ from the wired EPR_DECAY_RECV leaf.
-  # EPR_LOADING_DEFAULT is a real, used `loading` default (player_ratings.R,
-  # psr.R) currently at the identity value 1.0 -- registered rather than
-  # assumed inert for the same reason as EPV_RUCK_SWING_SCALE above. (2026-08-09)
-  "EPR_DECAY_DEFAULT_DAYS", "EPR_LOADING_DEFAULT",
+  # -- Legacy alias. EPR_DECAY_DEFAULT_DAYS is `<- EPR_DECAY_RECV`, so its
+  # value can never differ from the wired EPR_DECAY_RECV leaf. (2026-08-09)
+  # (EPV_ENGINE and EPV_CONT_LOSS_ALLOC sat here until 2026-08-18; the EPR_DECAY
+  # and EPR_PRIOR_* leaves are still captured under v2's recv/disp/spoil/hitout
+  # labels -- the values are captured, only the naming is stale.)
+  "EPR_DECAY_DEFAULT_DAYS",
 
   # -- The NP_ family, widened into this scan on 2026-09-08 and audited on
   # 2026-09-10 (the stoppage pricing unit, the offence pool and the contest
