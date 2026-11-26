@@ -78,8 +78,8 @@ v4 still uses v3's aerial contest model (`build_aerial_contests()`,
 model in `R/epv_difficulty.R`, which is why the v3 material below still matters.
 Three constants are now read by nothing but stay because they are in
 `.rating_defining_constants()` (removing them would change the published
-manifest): `EPV3_CHANNELS`, `EPV_CONT_LOSS_ALLOC`, `EPV_DIFFICULTY_SPLIT`. They go
-in the next rating vintage.
+manifest): `EPV3_CHANNELS`, `EPV_CONT_LOSS_ALLOC`, `EPV_DIFFICULTY_SPLIT`. They were not removed in v18 (2026-11-27), so they go
+in a later rating vintage.
 
 **Before touching anything EPV- or contest-related, read
 [`../docs/reference/EPV-V3-CHANNELS.md`](../docs/reference/EPV-V3-CHANNELS.md)**
