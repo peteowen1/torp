@@ -408,6 +408,20 @@ create_mock_api_response <- function() {
     )
   )
 }
+# Difficulty terms for the shared one-round slice, fitted once per test session
+# on the previous season (the NP_DIFFICULTY_FIT default, torp#258) and reused.
+# Without this every create_player_game_data() call on .shared$pbp loads and
+# fits a whole season, which took the coverage job past its 30-minute limit
+# (PR #323). NULL when the data could not be loaded or fitted.
+.shared_np_terms <- function() {
+  if (!exists("np_terms", envir = .shared, inherits = FALSE)) {
+    .shared$np_terms <- if (is.null(.shared$pbp) || is.null(.shared$chains)) NULL else
+      tryCatch(suppressMessages(np_difficulty_terms_for_season(2024, .shared$pbp, .shared$chains)),
+               error = function(e) NULL)
+  }
+  .shared$np_terms
+}
+
 # -----------------------------------------------------------------------------
 # Shared Network Data (loaded once per test session, reused by all test files)
 # -----------------------------------------------------------------------------
