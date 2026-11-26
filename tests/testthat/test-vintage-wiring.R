@@ -45,12 +45,6 @@
 # defining constant"). Fixing it is a separate, deliberate change -- queued,
 # not silently absorbed here.
 KNOWN_NON_DEFINING <- c(
-  # -- Test-version flags, off by default (2026-11-25, plan
-  # NP-FREE-AGAINST-AND-TACKLES.md). Registered, not wired, because at their
-  # defaults they change nothing; wire them into .rating_defining_constants()
-  # in the same change that turns one on for a published vintage.
-  "NP_FREE_AGAINST_BLAME", "NP_TACKLE_POOL_SHARE", "NP_TACKLE_STOPPAGE_SHARE",
-  "NP_NAMED_LOSER_SHARE",
   # -- Raw EPV per-event assignment weights: the constants that directly
   # compute epv_recv/epv_disp/epv_spoil/epv_hitout in add_epv_vars(). Each one
   # genuinely IS rating-defining; none is threaded into the manifest. (2026-08-09)

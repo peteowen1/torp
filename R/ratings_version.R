@@ -166,6 +166,13 @@
     NP_ERROR_DESCS = as.list(NP_ERROR_DESCS),
     EPV3_TARGET_FROM_I50 = EPV3_TARGET_FROM_I50,
     NP_SIREN_TO_POOL = NP_SIREN_TO_POOL,
+    # v18 (Pete 2026-11-25 / 26, both gates neutral): wired in the same change
+    # that turns them on, as their register entry asked. Free Against moves a
+    # mean of 0.0024 EPV per player-game, named-loser 0.149.
+    NP_FREE_AGAINST_BLAME = NP_FREE_AGAINST_BLAME,
+    NP_TACKLE_POOL_SHARE = NP_TACKLE_POOL_SHARE,
+    NP_TACKLE_STOPPAGE_SHARE = NP_TACKLE_STOPPAGE_SHARE,
+    NP_NAMED_LOSER_SHARE = NP_NAMED_LOSER_SHARE,
     NP_UNCONTESTED_RECEIVER_SHARE = NP_UNCONTESTED_RECEIVER_SHARE,
     # The disposer's share of a lost kick's surprise. Swept for the first time
     # 2026-09-08 (its own docstring called the shipped 0.30 "the default the

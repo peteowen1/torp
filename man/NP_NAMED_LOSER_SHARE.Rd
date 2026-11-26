@@ -11,11 +11,12 @@ An object of class \code{numeric} of length 1.
 NP_NAMED_LOSER_SHARE
 }
 \description{
-Test-version flag, 0 (off) by default (Pete 2026-09-11, "charge the beaten
-target instead of the kicker"; 2026-11-12, "build as a gated arm"). When a
-kick is lost at a contest the defence won and chains names the kick's
-target, a team-mate of the kicker, this share of the kicker's turnover debit
-moves to that target. Never on a turnover \code{NP_ERROR_BLAME_SHARE} already
-moved. Moves the recipient, never the amount. 1 is the decided value when on.
+1 from rating vintage v18 (Pete 2026-09-11, "charge the beaten target
+instead of the kicker"; gated 2026-11-12, shipped by click 2026-11-26; 0
+turns it off). When a kick is lost at a contest the defence won and chains
+names the kick's target, a team-mate of the kicker, this share of the
+kicker's turnover debit moves to that target. Never on a turnover
+\code{NP_ERROR_BLAME_SHARE} already moved. Moves the recipient, never the
+amount.
 }
 \keyword{internal}

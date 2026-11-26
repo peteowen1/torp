@@ -2114,46 +2114,46 @@ NP_ERROR_BLAME_SHARE <- 1
 
 #' Charge a free kick given away to the player who gave it away
 #'
-#' Test-version flag, off by default (Pete, 2026-11-25; plan
+#' On from rating vintage v18 (Pete, 2026-11-25, after a neutral gate; plan
 #' \code{docs/plans/NP-FREE-AGAINST-AND-TACKLES.md}). "Free Against" is a
-#' chains-only row, so today the debit stays with the teammate whose disposal
-#' came before it (2026 R0: Sam De Koning wears the free Jack Henry gave away).
-#' \code{TRUE} adds it to the \code{NP_ERROR_DESCS} route, so
+#' chains-only row, so with this off the debit stays with the teammate whose
+#' disposal came before it (2026 R0: Sam De Koning wears the free Jack Henry
+#' gave away). \code{TRUE} adds it to the \code{NP_ERROR_DESCS} route, so
 #' \code{NP_ERROR_BLAME_SHARE} of that debit moves to the player named on the
 #' Free Against row. It moves the recipient, never the amount.
 #' @keywords internal
-NP_FREE_AGAINST_BLAME <- FALSE
+NP_FREE_AGAINST_BLAME <- TRUE
 
 #' Share of a turnover's defence pool paid to the chains tackler who forced it
 #'
-#' Test-version flag, 0 (off) by default (Pete, 2026-11-25). When a chains-only
-#' "Tackle" row follows the opposition's act and the tackler's side holds a
-#' \code{defence_pool} payment on that act (the ball was won from the other
-#' side), this share of that pool payment is paid to the tackler by name. The
-#' amount is unchanged, so conservation holds. 0.5 is the decided value when on.
+#' 0.5 from rating vintage v18 (Pete, 2026-11-25; 0 turns it off). When a
+#' chains-only "Tackle" row follows the opposition's act and the tackler's side
+#' holds a \code{defence_pool} payment on that act (the ball was won from the
+#' other side), this share of that pool payment is paid to the tackler by name.
+#' The amount is unchanged, so conservation holds.
 #' @keywords internal
-NP_TACKLE_POOL_SHARE <- 0
+NP_TACKLE_POOL_SHARE <- 0.5
 
 #' Share of a stoppage pool paid to the chains tackler in that stoppage
 #'
-#' Test-version flag, 0 (off) by default (Pete, 2026-11-25). When a chains-only
-#' "Tackle" row follows a stoppage, this share of the tackler's own side's
-#' \code{stoppage_pool} payment on that stoppage is paid to him by name,
-#' whatever its sign. Every other tackle is paid nothing. 0.5 is the decided
-#' value when on.
+#' 0.5 from rating vintage v18 (Pete, 2026-11-25; 0 turns it off). When a
+#' chains-only "Tackle" row follows a stoppage, this share of the tackler's own
+#' side's \code{stoppage_pool} payment on that stoppage is paid to him by name,
+#' whatever its sign. Every other tackle is paid nothing.
 #' @keywords internal
-NP_TACKLE_STOPPAGE_SHARE <- 0
+NP_TACKLE_STOPPAGE_SHARE <- 0.5
 
 #' Share of a lost contest kick's debit charged to the beaten target
 #'
-#' Test-version flag, 0 (off) by default (Pete 2026-09-11, "charge the beaten
-#' target instead of the kicker"; 2026-11-12, "build as a gated arm"). When a
-#' kick is lost at a contest the defence won and chains names the kick's
-#' target, a team-mate of the kicker, this share of the kicker's turnover debit
-#' moves to that target. Never on a turnover \code{NP_ERROR_BLAME_SHARE} already
-#' moved. Moves the recipient, never the amount. 1 is the decided value when on.
+#' 1 from rating vintage v18 (Pete 2026-09-11, "charge the beaten target
+#' instead of the kicker"; gated 2026-11-12, shipped by click 2026-11-26; 0
+#' turns it off). When a kick is lost at a contest the defence won and chains
+#' names the kick's target, a team-mate of the kicker, this share of the
+#' kicker's turnover debit moves to that target. Never on a turnover
+#' \code{NP_ERROR_BLAME_SHARE} already moved. Moves the recipient, never the
+#' amount.
 #' @keywords internal
-NP_NAMED_LOSER_SHARE <- 0
+NP_NAMED_LOSER_SHARE <- 1
 
 #' A quarter's last act is nobody's loss: its evaporated state goes to the pool
 #'
@@ -2419,14 +2419,15 @@ NP_STOPPAGE_SHRINK_N <- 20
 #' Whether non-TOG-adjusted rate stats count unplayed rounds as exposure
 #'
 #' dream_team_points and rating_points use one unit of exposure per row. With
-#' \code{FALSE} (the published behaviour) a round the player was rostered for
-#' but not selected still adds one unit of exposure with nothing in the
-#' numerator, so the per-game rate is deflated for anyone who misses rounds.
-#' With \code{TRUE} only games played count as exposure (finding B69 in
+#' \code{FALSE} (published up to rating vintage v17) a round the player was
+#' rostered for but not selected still adds one unit of exposure with nothing
+#' in the numerator, so the per-game rate is deflated for anyone who misses
+#' rounds. With \code{TRUE} (from v18; Pete decided 2026-11-24 after walking
+#' real rows) only games played count as exposure (finding B69 in
 #' docs/reviews/CODEBASE-REVIEW-2026-10-17.md of the torpverse repo; measured
-#' 2025-26: 19,053 of 38,982 stat-rating rows are availability-only).
-#' Held at \code{FALSE} until the owner has walked real example rows; flipping
-#' it to \code{TRUE} is the whole change, and it moves the published
-#' dream_team_points_* and rating_points_* columns.
+#' 2025-26: 19,053 of 38,982 stat-rating rows are availability-only). It moves
+#' the published dream_team_points_* and rating_points_* columns only: no PSR,
+#' OSR or DSR coefficient reads them (checked 2026-11-26), so TORP does not move
+#' and this is not in \code{.rating_defining_constants()}.
 #' @keywords internal
-STAT_RATE_NONTOG_EXCLUDE_UNPLAYED <- FALSE
+STAT_RATE_NONTOG_EXCLUDE_UNPLAYED <- TRUE
