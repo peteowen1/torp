@@ -62,6 +62,19 @@ grade_year <- function(y) {
   stopifnot(!anyNA(a$from_club), !anyNA(a$to_club),
             !anyNA(a[type == "pick_draft", pick]), !anyNA(a[type == "future_pick", .(year, round, orig_club)]))
 
+  # Corrections to Wikipedia's tables (2026-11-26). 2021 trade 5 lists
+  # "2022 third round pick (Fremantle)" going from Collingwood to Fremantle,
+  # but Collingwood then gives the same pick to Hawthorn in trade 16 (the Max
+  # Lynch trade), and DraftGuru's 2022 final order has it "To Coll in 2021 pick
+  # swap | To Haw in 2021 Lynch trade" (trades_past/draft_order_raw/
+  # 2022_draftguru_final.html). So in trade 5 it went Fremantle to Collingwood.
+  if (y == 2021L) {
+    fx <- a[trade == 5 & item == "2022 third round pick (Fremantle)", which = TRUE]
+    stopifnot("2021 trade 5 correction: the row is gone or already reads Collingwood (has Wikipedia fixed it? then delete this block)" =
+                length(fx) == 1 && a$to_club[fx] == "Fremantle")
+    a[fx, c("to_club", "from_club") := .("Collingwood", "Fremantle")]
+  }
+
   # Future picks.
   lad <- as.data.table(get_afl_ladder(y))[, .(abbr = torp_team_abbr(team), ladder = as.integer(rank))]
   stopifnot(nrow(lad) == 18, !anyNA(lad$abbr))
