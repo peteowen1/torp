@@ -28,7 +28,6 @@ Imports:
     stringr (>= 1.4.0),
     tibble (>= 3.0.0),
     tidyr (>= 1.2.0),
-    tidyselect (>= 1.2.0),
     withr (>= 2.5.0)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

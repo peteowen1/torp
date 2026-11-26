@@ -144,7 +144,10 @@ test_that("explain_epr() imputes a missing TOG the way production does", {
   pr  <- paste(code[["player_ratings.R"]], collapse = " ")
   # Both must impute; neither may floor a raw NA.
   expect_match(psr, "fifelse\\(\\s*is.na\\(time_on_ground_percentage\\), 100")
-  expect_match(pr,  "fifelse\\(is.na\\(time_on_ground_percentage\\), 100")
+  # player_ratings.R imputes through .tog_weight() since 1057371d; the
+  # helper's own definition carries the fifelse, pinned in
+  # test-opponent-profile-core.R.
+  expect_match(pr,  "\\.tog_weight\\(time_on_ground_percentage\\)")
 })
 
 test_that("explain_epr() does not call get() inside a data.table j-expression", {

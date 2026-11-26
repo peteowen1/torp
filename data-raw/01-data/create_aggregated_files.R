@@ -32,22 +32,13 @@ DATA_TYPES <- c("chains", "pbp")
 #'
 #' @param season Season year
 #' @return Integer round number
-get_start_round <- function(season) {
-  if (season >= 2024) return(0)
-  return(1)
-}
+get_start_round <- function(season) torp:::.afl_first_round(season)
 
 #' Get maximum round for a season
 #'
 #' @param season Season year
 #' @return Integer round number
-get_max_round <- function(season) {
-  current_season <- get_afl_season()
-  if (season == current_season) {
-    return(get_afl_week())
-  }
-  .afl_last_round(season)   # from fixtures: 29 in 2026
-}
+get_max_round <- function(season) torp:::.afl_max_round(season)   # fixtures: 29 in 2026
 
 # Core Functions ----
 

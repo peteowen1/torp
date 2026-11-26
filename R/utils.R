@@ -66,6 +66,19 @@ get_afl_season <- function(type = "current") {
   if (season %in% c(2021, 2022)) 27L else 28L
 }
 
+# The first round a season has: round 0 (Opening Round) from
+# AFL_FIRST_ROUND_ZERO_SEASON on, round 1 before it. One definition for the
+# copies the data-raw scripts each wrote out (review B124/A327, 2026-10-17).
+.afl_first_round <- function(season) {
+  if (season >= AFL_FIRST_ROUND_ZERO_SEASON) 0L else 1L
+}
+
+# The last round to process for a season: this season's current week
+# (`get_afl_week(type)`), or the fixtures' last round for a finished one.
+.afl_max_round <- function(season, type = "current") {
+  if (season == get_afl_season()) get_afl_week(type = type) else .afl_last_round(season)
+}
+
 #' Get AFL Week
 #'
 #' Determine the current or next AFL week (round) based on fixtures.
