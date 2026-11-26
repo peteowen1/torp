@@ -102,16 +102,17 @@ for r in fw:
         bs = car[best]["by_season"]
         rec.update(afl_href=best, afl_games=sum(v[0] for s, v in bs.items() if s > dy),
                    brownlow_votes=sum(v[1] for s, v in bs.items() if s > dy),
-                   aa_selections=aa_by.get(best, 0), match=via)
+                   aa_selections=aa_by.get(best, 0), match=via, afl_first_season=min(bs))
     elif fg == 0:
-        rec.update(afl_href="", afl_games=0, brownlow_votes=0, aa_selections=0, match="no games")
+        rec.update(afl_href="", afl_games=0, brownlow_votes=0, aa_selections=0, match="no games",
+                   afl_first_season="")
     else:
         rec.update(afl_href=best or "", afl_games="", brownlow_votes="", aa_selections="",
-                   match="UNMATCHED" if best is None else f"games gap {bestgap:.0f}")
+                   match="UNMATCHED" if best is None else f"games gap {bestgap:.0f}", afl_first_season="")
     how[rec["match"] if not rec["match"].startswith("games gap") else "games gap"] += 1
     out.append(rec)
 
-cols = list(fw[0].keys()) + ["afl_href", "afl_games", "brownlow_votes", "aa_selections", "match"]
+cols = list(fw[0].keys()) + ["afl_href", "afl_games", "brownlow_votes", "aa_selections", "match", "afl_first_season"]
 with open(os.path.join(TV, "04d_draftee_quality.csv"), "w", newline="", encoding="utf-8") as fh:
     w = csv.DictWriter(fh, fieldnames=cols); w.writeheader(); w.writerows(out)
 played = [r for r in out if num(r["games_since_drafted"]) > 0]

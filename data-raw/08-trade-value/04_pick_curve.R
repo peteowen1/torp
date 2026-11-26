@@ -108,5 +108,34 @@ cat("\npick value curves, scaled so pick 1 = 3,000 (DVI = AFL Draft Value Index,
 print(pv[pick %in% show])
 fwrite(pv, file.path(out_dir, "04_pick_curve.csv"))
 
+# ---- 4. Served curve: blend in the long-history games shape ----
+# Games past 100 by pick, 1991-2015 National Drafts, first-time draftees only
+# (no father-son / academy, no player with AFL games by his draft year), from
+# 04d_match_draftee_quality.py. Smoothed in log(pick), forced non-increasing,
+# then mixed with the TORP curve's shape at PICK_GAMES_BLEND and put back on
+# the TORP curve's scale at pick 1, so pick 1 is worth what it was.
+source("data-raw/08-trade-value/trade_constants.R")
+q <- fread(file.path(out_dir, "04d_draftee_quality.csv"))
+q <- q[!flag %in% c("F", "A", "R") & pick <= 60 &
+       (is.na(afl_first_season) | afl_first_season > draft_year)]
+q[, g100 := pmax(games_since_drafted - 100, 0)]
+cat("
+games shape for the served curve:", nrow(q), "first-time picks 1-60, drafts",
+    min(q$draft_year), "-", max(q$draft_year), "
+")
+stopifnot(nrow(q) > 1300)
+f_g100 <- lm(g100 ~ ns(log(pick), df = 4), data = q)
+g_sh <- pmax(predict(f_g100, newdata = pv), 0)
+g_sh <- cummin(g_sh) / g_sh[1]                     # non-increasing, pick 1 = 1
+t_sh <- pv$v8_direct / pv$v8_direct[1]
+pv[, games_shape := round(g_sh, 4)]
+pv[, v8_value := round(pv$v8_direct[1] * ((1 - PICK_GAMES_BLEND) * t_sh + PICK_GAMES_BLEND * g_sh), 1)]
+pv[, v8_value_dvi_scale := round(3000 * v8_value / v8_value[1])]
+cat("served curve (v8_value) vs the TORP-only curve (v8_direct), PICK_GAMES_BLEND =", PICK_GAMES_BLEND, "
+")
+print(pv[pick %in% show, .(pick, v8_direct, v8_value, v8_dvi_scale, v8_value_dvi_scale, dvi)])
+fwrite(pv, file.path(out_dir, "04_pick_curve.csv"))
+stopifnot(all(diff(pv$v8_value) <= 0), pv$v8_value[1] == round(pv$v8_direct[1], 1))
+
 # Anchor (chosen before looking): value falls with pick in every view.
 stopifnot(coef(f_dir)[2] < 0, coef(f_dir8)[2] < 0, coef(f_g)[2] < 0)

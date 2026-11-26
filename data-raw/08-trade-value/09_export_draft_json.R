@@ -45,7 +45,7 @@ stopifnot(n_order >= 54, identical(order$pick, seq_len(n_order)), !anyNA(order$h
 # (games x time on ground x rating above replacement, 10% discount a year).
 # A pick past the end of the curve takes the curve's last value (zero), as in 06.
 picks <- order[, .(pick, holder, original_club)]
-picks[, torp_value := round(curve$v8_direct[match(pmin(pick, max(curve$pick)), curve$pick)], 1)]
+picks[, torp_value := round(curve$v8_value[match(pmin(pick, max(curve$pick)), curve$pick)], 1)]
 # Points from the checked list in 06 (the curve's own dvi column is incomplete).
 dvi <- fread(file.path(out_dir, "06_dvi.csv"))
 picks <- merge(picks, dvi, by = "pick", all.x = TRUE)

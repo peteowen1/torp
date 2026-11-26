@@ -38,7 +38,7 @@ years <- 2021:2025
 last_season <- 2026L
 repl <- as.numeric(readLines(file.path(out_dir, "03_replacement_level.txt")))
 curve <- fread(file.path(out_dir, "04_pick_curve.csv"))
-pick_value <- function(n) curve$v8_direct[match(pmin(pmax(round(n), 1), max(curve$pick)), curve$pick)]
+pick_value <- function(n) curve$v8_value[match(pmin(pmax(round(n), 1), max(curve$pick)), curve$pick)]
 abbr <- function(x) torp_team_abbr(x)
 
 # ---- 1. Seasons played, by club ----

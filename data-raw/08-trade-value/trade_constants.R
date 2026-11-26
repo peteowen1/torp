@@ -13,3 +13,13 @@
 # a forecast correction. A draftee from a pick is not scaled: he is on a
 # rookie contract, which is the case this factor is a stand-in for.
 PLAYER_VALUE_FACTOR <- 0.5
+
+# Pick value: share of the long-history games shape blended into the TORP
+# curve (Pete, 26 Nov 2026). On 1991-2015 drafts, star value (Brownlow votes +
+# All-Australian) matches the TORP curve and the AFL index, but career games
+# rate picks 7-15 at ~70% of a top-3 pick, not ~50% (paired gap -31 to -5
+# points), and picks 31-45 sit above the index on both measures. Pete chose to
+# move halfway toward games: durable role players are worth paying for.
+# Evidence: docs/plans/TRADE-VALUE.md "Long-history quality check". 0 = the old
+# curve (v8_direct). 04_pick_curve.R writes the blend as v8_value.
+PICK_GAMES_BLEND <- 0.5

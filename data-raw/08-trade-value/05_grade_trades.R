@@ -36,7 +36,7 @@ proj <- fread(file.path(out_dir, "03_projected_value_2026.csv"))
 curve <- fread(file.path(out_dir, "04_pick_curve.csv"))
 pick_value <- function(n) {
   n <- pmin(pmax(round(n), 1), max(curve$pick))
-  curve$v8_direct[match(n, curve$pick)]
+  curve$v8_value[match(n, curve$pick)]
 }
 
 # ---- 1. Parse the trades table ----
