@@ -67,8 +67,21 @@ if (already) {
 }
 
 m$vintages[[FROM]]$file <- preserved
+# The new entry records the EP/WP models its ratings will be built on. Refuse
+# unless they are known AND every season's play-by-play is already scored by
+# them (rebuild_pbp_on_current_models.R first): an unknown id would leave the
+# new vintage unguarded, and a stale season would record models that did not
+# score it.
+pbp_id <- torp:::.lookup_pbp_model_id()
+if (is.na(pbp_id)) stop("could not read the published EP/WP model id; refusing to promote an unguarded vintage")
+stale_pbp <- torp:::.stale_pbp_seasons(pbp_id, torp:::.read_pbp_model_stamps(),
+                                        seq.int(torp:::AFL_MIN_SEASON, as.integer(get_afl_season())))
+if (length(stale_pbp)) stop("play-by-play for ", paste(stale_pbp, collapse = ","), " is not on the published models (",
+                            pbp_id, "); run data-raw/03-ratings/rebuild_pbp_on_current_models.R first")
+say("EP/WP models for the ", TO, " entry: ", pbp_id, " (every season's play-by-play stamped with them)")
 m$vintages[[TO]] <- torp:::.build_rating_vintage_entry(nrow(snap), version = TO,
-                                                       file = "torp_ratings.parquet")
+                                                       file = "torp_ratings.parquet",
+                                                       pbp_model_id = pbp_id)
 m$canonical <- TO
 say("live constants going into the ", TO, " entry: EPV_ENGINE ", EPV_ENGINE,
     " | units ", EPR_UNITS_SCALE_V4, " | turnover-on-all-acts ", NP_TURNOVER_ON_ALL_ACTS)

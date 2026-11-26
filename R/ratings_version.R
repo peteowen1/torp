@@ -424,7 +424,12 @@
 #' @keywords internal
 .lookup_pbp_model_id <- function() {
   ov <- getOption("torp.pbp_model_id")
-  if (!is.null(ov)) return(as.character(ov))
+  if (!is.null(ov)) {
+    if (!identical(Sys.getenv("TESTTHAT"), "true")) {
+      cli::cli_alert_warning("EP/WP model id taken from option {.code torp.pbp_model_id} ({.val {ov}}), not from torpmodels.")
+    }
+    return(as.character(ov))
+  }
   tryCatch(.current_pbp_model_id(), error = function(e) {
     cli::cli_alert_warning(
       "Could not read the published EP/WP model id: {conditionMessage(e)}")
@@ -472,7 +477,9 @@
 #'   outgoing vintage), so the entry carries an explicit gap rather than a
 #'   definition the data was never built under. See
 #'   \code{.build_rating_vintage_entry()}.
-#' @param pbp_model_id EP/WP model id to record; `NA` when preserving an
+#' @param pbp_model_id EP/WP model id to record. `NA` means unknown: the id
+#'   already recorded for `version` is kept (none is recorded when there is
+#'   none), so a failed lookup never erases it. Pass `NA` when preserving an
 #'   outgoing vintage (see \code{.build_rating_vintage_entry()}).
 #' @param manifest The manifest to merge into. Defaults to the published one.
 #'   Pass a list only to rebuild a lost manifest, together with
@@ -494,6 +501,18 @@ publish_ratings_manifest <- function(n_rows, version = RATING_VINTAGE,
       "Could not read ratings_manifest.json, so it was not rewritten.",
       "x" = "Starting a new one would replace every vintage's record with this one's.",
       "i" = "If the manifest is really gone, rebuild it deliberately with {.code allow_create = TRUE}."))
+  }
+  # An unknown id (a failed lookup, or a preserve that cannot know) keeps the one
+  # already recorded for this vintage: the entry is replaced whole, so writing
+  # NA would erase it and silently disarm check 4 of check_vintage_alignment().
+  if (length(pbp_model_id) != 1 || is.na(pbp_model_id)) {
+    prev <- manifest$vintages[[version]]$pbp_model_id
+    if (!is.null(prev)) {
+      cli::cli_alert_info("EP/WP model id unknown for this write; keeping vintage {.val {version}}'s recorded {.val {prev}}.")
+      pbp_model_id <- as.character(prev)
+    } else {
+      pbp_model_id <- NA_character_
+    }
   }
   entry <- .build_rating_vintage_entry(n_rows, version = version, file = file,
                                        defining_constants = defining_constants,
@@ -820,7 +839,8 @@ read_ratings_manifest <- function() {
 #' 4. The canonical vintage's recorded `pbp_model_id` must match the EP/WP
 #'    models published now. A retrain re-scores every play without touching a
 #'    constant, so check 3 cannot see it (Pete 2026-11-27). An entry with no
-#'    recorded id passes with a warning.
+#'    recorded id passes with a warning, under `strict` only when every
+#'    season's play-by-play stamps match the published models.
 #'
 #' @param strict If TRUE, an unreadable manifest or an undefined canonical
 #'   vintage aborts rather than warning. Defaults to `VERSEBUS_STRICT=1` via
@@ -842,6 +862,9 @@ read_ratings_manifest <- function() {
 #'   candidate flag.
 #' @param pbp_model_id The published EP/WP model id, or `NULL` to look it up
 #'   ([.lookup_pbp_model_id()]); injectable for tests.
+#' @param stale_seasons Seasons whose play-by-play stamps differ from the
+#'   published models, or `NULL` to read `pbp_model_stamps.json`. Read only for
+#'   an entry with no recorded models, under `strict`; injectable for tests.
 #' @return Invisibly, `list(aligned = TRUE, canonical = canon)` on success, or
 #'   `list(aligned = NA)` / `list(aligned = NA, canonical = canon)` when a
 #'   non-strict run grandfathers a gap it could not verify.
@@ -849,7 +872,8 @@ read_ratings_manifest <- function() {
 check_vintage_alignment <- function(strict = .strict_mode(),
                                     manifest = read_ratings_manifest(),
                                     candidate = NULL,
-                                    pbp_model_id = NULL) {
+                                    pbp_model_id = NULL,
+                                    stale_seasons = NULL) {
   branch <- Sys.getenv("GITHUB_REF_NAME", "local")
 
   if (is.null(manifest)) {
@@ -930,12 +954,26 @@ check_vintage_alignment <- function(strict = .strict_mode(),
   # recorded before this check existed carries no id and is let through with a
   # warning; the run's own manifest write then records it.
   canon_models <- canon_entry$pbp_model_id
+  live_models <- if (is.null(pbp_model_id)) .lookup_pbp_model_id() else pbp_model_id
   if (is.null(canon_models)) {
+    # Bootstrap (an entry written before this check). Recording the live id is
+    # only truthful if the published play-by-play really is on those models, so
+    # under strict the per-season stamps must agree before the run may write.
+    if (isTRUE(strict) && !is.na(live_models)) {
+      stale <- if (is.null(stale_seasons)) .stale_pbp_seasons(live_models, .read_pbp_model_stamps(),
+                                   seq.int(AFL_MIN_SEASON, as.integer(get_afl_season()))) else stale_seasons
+      if (length(stale)) {
+        cli::cli_abort(c(
+          "Vintage {.val {canon}} records no EP/WP models, and the play-by-play for {.val {stale}} is not on the published models ({.val {live_models}}) (branch {.val {branch}}).",
+          "x" = "Recording the published models now would describe data they did not score.",
+          "i" = "Re-score with {.file data-raw/03-ratings/rebuild_pbp_on_current_models.R}, then publish a new rating vintage."
+        ), class = "torp_error_vintage_models_drift")
+      }
+    }
     cli::cli_alert_warning(
-      "Vintage {.val {canon}} does not record the EP/WP models it was built on; this run's manifest write records them.")
+      "Vintage {.val {canon}} does not record the EP/WP models it was built on; a canonical ratings write records them.")
     return(invisible(list(aligned = TRUE, canonical = canon)))
   }
-  live_models <- if (is.null(pbp_model_id)) .lookup_pbp_model_id() else pbp_model_id
   if (is.na(live_models)) {
     if (isTRUE(strict)) {
       cli::cli_abort(c(

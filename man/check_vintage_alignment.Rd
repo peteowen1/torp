@@ -9,7 +9,8 @@ check_vintage_alignment(
   strict = .strict_mode(),
   manifest = read_ratings_manifest(),
   candidate = NULL,
-  pbp_model_id = NULL
+  pbp_model_id = NULL,
+  stale_seasons = NULL
 )
 }
 \arguments{
@@ -36,6 +37,10 @@ candidate flag.}
 
 \item{pbp_model_id}{The published EP/WP model id, or \code{NULL} to look it up
 (\code{\link[=.lookup_pbp_model_id]{.lookup_pbp_model_id()}}); injectable for tests.}
+
+\item{stale_seasons}{Seasons whose play-by-play stamps differ from the
+published models, or \code{NULL} to read \code{pbp_model_stamps.json}. Read only for
+an entry with no recorded models, under \code{strict}; injectable for tests.}
 }
 \value{
 Invisibly, \code{list(aligned = TRUE, canonical = canon)} on success, or
@@ -62,7 +67,8 @@ where a rating-defining constant was edited without bumping
 \item The canonical vintage's recorded \code{pbp_model_id} must match the EP/WP
 models published now. A retrain re-scores every play without touching a
 constant, so check 3 cannot see it (Pete 2026-11-27). An entry with no
-recorded id passes with a warning.
+recorded id passes with a warning, under \code{strict} only when every
+season's play-by-play stamps match the published models.
 }
 }
 \keyword{internal}

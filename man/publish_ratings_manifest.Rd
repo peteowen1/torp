@@ -35,7 +35,9 @@ outgoing vintage), so the entry carries an explicit gap rather than a
 definition the data was never built under. See
 \code{.build_rating_vintage_entry()}.}
 
-\item{pbp_model_id}{EP/WP model id to record; \code{NA} when preserving an
+\item{pbp_model_id}{EP/WP model id to record. \code{NA} means unknown: the id
+already recorded for \code{version} is kept (none is recorded when there is
+none), so a failed lookup never erases it. Pass \code{NA} when preserving an
 outgoing vintage (see \code{.build_rating_vintage_entry()}).}
 
 \item{manifest}{The manifest to merge into. Defaults to the published one.

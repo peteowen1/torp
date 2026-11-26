@@ -73,6 +73,11 @@ if (!publish) {
       rm(chains, pbp); gc()
     }
     new <- as.data.table(arrow::read_parquet(f_new(s)))
+    # A file left in the dir by an earlier run may be on older models.
+    if (!identical(unique(new$pbp_model_id), cur_id)) {
+      stop(s, ": the file in ", out_dir, " was scored by ", paste(unique(new$pbp_model_id), collapse = ","),
+           ", not ", cur_id, "; delete it and re-run")
+    }
     old <- as.data.table(load_pbp(s, rounds = TRUE))
     all_na <- function(d) names(d)[vapply(d, function(x) all(is.na(x)), logical(1))]
     k_new <- unique(new[, ..key]); k_old <- unique(old[, ..key])
@@ -85,6 +90,7 @@ if (!publish) {
     m <- merge(new, old, by = key, suffixes = c(".n", ".o"))
     for (cc in intersect(c("exp_pts", "delta_epv", "wp", "wpa", "xscore"), intersect(names(new), names(old)))) {
       d <- abs(m[[paste0(cc, ".n")]] - m[[paste0(cc, ".o")]])
+      if (all(is.na(d))) { say("  ", cc, ": no comparable values (all NA on one side)"); next }
       say(sprintf("  %-9s differ %d of %d | max %.4f | mean %.5f", cc,
                   sum(d > 1e-9, na.rm = TRUE), nrow(m), max(d, na.rm = TRUE), mean(d, na.rm = TRUE)))
     }
@@ -97,34 +103,67 @@ if (!publish) {
 # PUBLISH ----
 missing <- seasons[!file.exists(vapply(seasons, f_new, ""))]
 if (length(missing)) stop("no checked file for ", paste(missing, collapse = ","), "; run the dry run first")
-bak <- file.path(out_dir, "backup"); dir.create(bak, showWarnings = FALSE)
+
+# Everything is checked BEFORE the first upload, so a bad file can never stop
+# the run with some seasons already live. Backups are fresh copies of what is
+# published right now (never a leftover), each checked against the asset size.
+bak <- file.path(out_dir, paste0("backup_", format(Sys.time(), "%Y%m%d_%H%M%S")))
+dir.create(bak, recursive = TRUE)
+sizes <- system2("gh", c("release", "view", "pbp-data", "-R", get_torp_data_repo(), "--json", "assets",
+                         "--jq", shQuote(".assets[] | [.name, .size] | @tsv")), stdout = TRUE)
+sizes <- stats::setNames(as.numeric(sub(".*\t", "", sizes)), sub("\t.*", "", sizes))
+key_cols <- c("match_id", "display_order")
 for (s in seasons) {
   name <- sprintf("pbp_data_%d_all.parquet", s)
-  if (!file.exists(file.path(bak, name))) {
-    system2("gh", c("release", "download", "pbp-data", "-R", get_torp_data_repo(), "-p", name, "-D", bak, "--clobber"))
+  st <- system2("gh", c("release", "download", "pbp-data", "-R", get_torp_data_repo(), "-p", name, "-D", bak, "--clobber"))
+  got <- file.path(bak, name)
+  if (!identical(as.integer(st), 0L) || !file.exists(got) || !identical(file.size(got), sizes[[name]])) {
+    stop(s, ": backup of the published file failed (gh exit ", st, "); nothing uploaded")
   }
-  pbp <- arrow::read_parquet(f_new(s))
-  stopifnot(identical(unique(pbp$pbp_model_id), cur_id))
-  save_to_release(pbp, paste0("pbp_data_", s, "_all"), "pbp-data")
-  stopifnot(isTRUE(.record_pbp_model_stamps(s, pbp)))
-  say(s, ": published ", nrow(pbp), " rows + stamp")
-  rm(pbp); gc()
+  new <- as.data.table(arrow::read_parquet(f_new(s), col_select = dplyr::all_of(c(key_cols, "pbp_model_id"))))
+  old <- as.data.table(arrow::read_parquet(got, col_select = dplyr::all_of(key_cols)))
+  if (!identical(unique(new$pbp_model_id), cur_id)) stop(s, ": staged file not on ", cur_id, "; nothing uploaded")
+  lost <- nrow(fsetdiff(unique(old), unique(new[, ..key_cols])))
+  if (lost > 0) stop(s, ": the staged file lacks ", lost, " plays now published (re-run the dry run); nothing uploaded")
+  say(s, ": checked (", nrow(new), " rows, backup ", round(file.size(got) / 1e6), " MB)")
+}
+
+done_pbp <- integer(0); done_derived <- integer(0)
+status <- function() {
+  say("
+STATUS: play-by-play + stamp published for ", paste(done_pbp, collapse = ","),
+      " | xg + chart rebuilt for ", paste(done_derived, collapse = ","),
+      " | requested ", paste(seasons, collapse = ","),
+      if (!setequal(done_derived, seasons)) " -- INCOMPLETE: re-run publish for the rest (safe to repeat; each run keeps its own backup dir)" else "",
+      "
+Backups of the previously published files: ", bak)
 }
 chart_cols <- c("match_id", "season", "round_number", "period", "period_seconds",
   "total_seconds", "display_order", "home_team_name", "away_team_name", "team", "home",
   "pos_team_points", "opp_team_points", "points_diff", "home_points", "away_points",
   "exp_pts", "delta_epv", "wp", "wpa", "description", "player_name", "play_type",
   "shot_row", "points_shot")
-for (s in seasons) {
-  xg_df <- calculate_match_xgs(s, .afl_first_round(s):.afl_max_round(s))
-  save_to_release(xg_df, paste0("xg_data_", s), "xg-data")
-  pbp <- load_pbp(s, rounds = TRUE)
-  stopifnot(identical(unique(pbp$pbp_model_id), cur_id))  # the read-back is the new file
-  save_to_release(pbp[, intersect(chart_cols, names(pbp)), drop = FALSE],
-                  paste0("ep_wp_chart_", s, "_all"), "ep_wp_chart-data")
-  say(s, ": xg ", nrow(xg_df), " matches, chart ", nrow(pbp), " rows")
-  rm(xg_df, pbp); gc()
-}
-stale <- .stale_pbp_seasons(cur_id, .read_pbp_model_stamps(), seasons)
-if (length(stale)) stop("seasons still stale after publishing: ", paste(stale, collapse = ","))
-say("PUBLISHED. Previous play-by-play kept in ", bak, ". Next: the rating vintage (header, steps 1-4).")
+tryCatch({
+  for (s in seasons) {
+    pbp <- arrow::read_parquet(f_new(s))
+    save_to_release(pbp, paste0("pbp_data_", s, "_all"), "pbp-data")
+    if (!isTRUE(.record_pbp_model_stamps(s, pbp))) stop(s, ": published, but its model stamp was not recorded")
+    done_pbp <- c(done_pbp, s)
+    say(s, ": published ", nrow(pbp), " rows + stamp")
+    rm(pbp); gc()
+  }
+  for (s in seasons) {
+    xg_df <- calculate_match_xgs(s, .afl_first_round(s):.afl_max_round(s))
+    save_to_release(xg_df, paste0("xg_data_", s), "xg-data")
+    pbp <- load_pbp(s, rounds = TRUE)
+    if (!identical(unique(pbp$pbp_model_id), cur_id)) stop(s, ": read back the old play-by-play; xg/chart not rebuilt")
+    save_to_release(pbp[, intersect(chart_cols, names(pbp)), drop = FALSE],
+                    paste0("ep_wp_chart_", s, "_all"), "ep_wp_chart-data")
+    done_derived <- c(done_derived, s)
+    say(s, ": xg ", nrow(xg_df), " matches, chart ", nrow(pbp), " rows")
+    rm(xg_df, pbp); gc()
+  }
+  stale <- .stale_pbp_seasons(cur_id, .read_pbp_model_stamps(), seasons)
+  if (length(stale)) stop("seasons still stale after publishing: ", paste(stale, collapse = ","))
+  say("PUBLISHED. Next: the rating vintage (header, steps 1-4).")
+}, finally = status())
