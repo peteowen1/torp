@@ -38,7 +38,7 @@ years <- 2021:2025
 last_season <- 2026L
 repl <- as.numeric(readLines(file.path(out_dir, "03_replacement_level.txt")))
 curve <- fread(file.path(out_dir, "04_pick_curve.csv"))
-pick_value <- function(n) curve$v8_direct[match(pmin(pmax(round(n), 1), max(curve$pick)), curve$pick)]
+pick_value <- function(n) curve$v8_value[match(pmin(pmax(round(n), 1), max(curve$pick)), curve$pick)]
 abbr <- function(x) torp_team_abbr(x)
 
 # ---- 1. Seasons played, by club ----
@@ -119,6 +119,20 @@ credit_player <- function(pid, cl, s_from, y) {
 
 # ---- 4. Grade each year ----
 drafts <- lapply(setNames(years, years), function(y) parse_wiki_draft(file.path(raw_dir, sprintf("wiki_%d_draft.html", y)), y))
+# Academy and father-son bids: "matched bid by X" names the bidder; the club
+# making the selection is the one that matched. 2021 also lists "used picks".
+bids <- rbindlist(lapply(years, function(Yd) {
+  d <- drafts[[as.character(Yd)]]$picks[grepl("matched bid", notes)]
+  d[, .(draft = Yd, bid_pick = pick, matcher = abbr(club), player,
+        used = fifelse(grepl("used picks?", notes), sub(".*used picks? ([0-9, and]+).*", "\\1", notes), NA_character_))]
+}))
+bm <- match_draft_names(bids[, .(row = .I, player = sub(" Jr\\.?$", "", player))], all_names)
+bids[, player_id := bm$player_id[order(bm$row)]]
+cat("bids matched 2021-2025:", nrow(bids), "| bid players matched to a TORP player:", bids[!is.na(player_id), .N], "\n")
+if (bids[is.na(player_id), .N]) {
+  cat("  bid players not matched (before 2024 they score 0; 2024-25 scale by 1):\n")
+  print(bids[is.na(player_id), .(draft, bid_pick, matcher, player)])
+}
 grade_year <- function(y) {
   a <- copy(assets[[as.character(y)]])
   a[, `:=`(to = abbr(to_club), from = abbr(from_club))]
@@ -188,6 +202,36 @@ grade_year <- function(y) {
       }
     }
   }
+  # Picks spent matching a bid (Pete, 2026-11-26). A pick the receiving club
+  # held in a draft where it matched an academy or father-son bid, and that
+  # never became a selection, is taken as spent on that bid. Only the 2021
+  # page lists the picks used, so for every year it is inferred; the 2021 list
+  # checks the inference below. It is graded at its trade-time value scaled by
+  # how the club's bid players turned out against the curve at their bid
+  # picks: the club's own consumed picks are unknown, so no points split is
+  # attempted, and a bid player who has not played yet (2024-25) scales by 1.
+  un <- a[type != "player" & is.na(how) & draft %in% years, which = TRUE]
+  if (length(un)) {
+    bid_ratio <- function(Yd, cl) {
+      b <- bids[draft == Yd & matcher == cl]
+      if (!nrow(b)) return(NA_real_)
+      got <- exp <- 0
+      for (k in seq_len(nrow(b))) {
+        e <- pick_value(b$bid_pick[k]) * disc^(Yd - y)
+        # Unmatched before 2024: never played, so he scores 0, as a draftee does.
+        turned <- if (is.na(b$player_id[k])) (if (Yd < 2024L) 0 else e) else {
+          cp <- credit_player(b$player_id[k], cl, Yd + 1L, y)
+          if (cp$seasons == 0 && Yd >= 2024L) e else cp$realised + cp$after
+        }
+        got <- got + turned; exp <- exp + e
+      }
+      if (exp > 0) got / exp else NA_real_
+    }
+    for (i in un) {
+      r <- bid_ratio(a$draft[i], a$to[i])
+      if (!is.na(r)) set(a, i, c("realised", "after", "how"), list(0, a$value[i] * r, "spent on a bid (inferred)"))
+    }
+  }
   a[type != "player" & is.na(how), how := "not traced"]
   a[how %in% c("not traced", "draft not yet held"), `:=`(realised = 0, after = value)]
   a[how == "no player match", `:=`(realised = 0, after = 0)]
@@ -216,11 +260,23 @@ all_g <- rbindlist(lapply(res, `[[`, "g"))
 
 # ---- 5. Anchors (chosen before looking) ----
 pick_rows <- all_a[type != "player" & draft <= 2025]
+# Check the bid inference where the page says which picks were used (2021 only).
+# A lower bound: the asset numbers are October trade-text numbers, the page's
+# "used picks" are draft-night numbers, and picks move in between.
+inf21 <- all_a[how == "spent on a bid (inferred)" & draft == 2021L]
+used21 <- bids[draft == 2021L & !is.na(used), .(matcher, n = as.integer(unlist(regmatches(used, gregexpr("[0-9]+", used))))), by = .I]
+inf21[, num := fifelse(!is.na(pick), as.integer(pick), NA_integer_)]
+cat("bid inference, 2021 check: inferred-spent picks", nrow(inf21), "| with a known number", inf21[!is.na(num), .N],
+    "| of those listed as used by that club:", inf21[!is.na(num), sum(paste(to, num) %in% used21[, paste(matcher, n)])], "\n")
+cat("spent on a bid (inferred):", pick_rows[how == "spent on a bid (inferred)", .N], "picks, at-the-time value",
+    round(pick_rows[how == "spent on a bid (inferred)", sum(value)], 1), "\n")
 anchors <- c(
   nets_sum_to_zero = all_g[, abs(sum(net_turned)) < 1e-6, by = year][, all(V1)],
   # By at-the-time value: most untraced picks are late ones spent matching a
   # bid or never used, so a count understates what is traced.
-  picks_traced_80pct_of_value = pick_rows[, sum(value[how != "not traced"]) / sum(value)] >= 0.8,
+  # Counts "spent on a bid (inferred)" as traced (Pete, 2026-11-26); the share
+  # confirmed without it is printed below.
+  picks_traced_or_bid_inferred_80pct_of_value = pick_rows[, sum(value[how != "not traced"]) / sum(value)] >= 0.8,
   dawson_still_at_adelaide = all_a[yr == 2021 & item == "Jordan Dawson", how] == "still there",
   grundy_traded_on_2023 = all_a[yr == 2022 & item == "Brodie Grundy" & to == abbr("Melbourne"), how] == "traded on 2023",
   # Added after Junior Rioli (Willie) and three others were found credited 0.
@@ -228,7 +284,9 @@ anchors <- c(
 )
 print(anchors)
 cat("picks traced:", pick_rows[how != "not traced", .N], "of", nrow(pick_rows),
-    "| share of at-the-time pick value traced:", round(pick_rows[, sum(value[how != "not traced"]) / sum(value)], 3), "\n")
+    "| share of at-the-time pick value traced:", round(pick_rows[, sum(value[how != "not traced"]) / sum(value)], 3),
+    "| confirmed, without bid inference:",
+    round(pick_rows[, sum(value[!how %in% c("not traced", "spent on a bid (inferred)")]) / sum(value)], 3), "\n")
 print(pick_rows[, .(n = .N, mean_pick_then = round(mean(fifelse(type == "pick_draft", pick, exp_pick)), 1),
                     value_then = round(sum(value), 1)), by = .(traced = how != "not traced")])
 

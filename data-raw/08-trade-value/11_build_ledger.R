@@ -71,7 +71,8 @@ curve <- fread(file.path(out_dir, "04_pick_curve.csv"))[pick %in% c(1, 2, 3, 5, 
 D <- list(years = blocks,
           curve = lapply(seq_len(nrow(curve)), function(i) {
             cc <- curve[i]
-            list(pick = cc$pick, v8 = cc$v8_dvi_scale, v5 = cc$v5_dvi_scale, games = cc$games_dvi_scale,
+            # v8 = the served curve the grades use (v8_value, PICK_GAMES_BLEND), not the TORP-only fit
+            list(pick = cc$pick, v8 = cc$v8_value_dvi_scale, v5 = cc$v5_dvi_scale, games = cc$games_dvi_scale,
                  dvi = na_null(cc$dvi))
           }))
 js <- toJSON(D, auto_unbox = TRUE, null = "null", digits = NA)

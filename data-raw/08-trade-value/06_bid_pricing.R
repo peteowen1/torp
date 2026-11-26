@@ -43,7 +43,7 @@ dvi_at <- function(p) ifelse(p <= 54, dvi[pmin(p, 54)], 0)
 slide_to <- function(pts) if (pts <= 0) NA_integer_ else if (pts > dvi[1]) 1L else min(c(which(dvi <= pts), 55L))
 
 curve <- fread(file.path(out_dir, "04_pick_curve.csv"))
-torp_at <- function(p) ifelse(is.na(p), 0, curve$v8_direct[match(pmin(p, max(curve$pick)), curve$pick)])
+torp_at <- function(p) ifelse(is.na(p), 0, curve$v8_value[match(pmin(p, max(curve$pick)), curve$pick)])
 
 # Draft order, picks 1-80: the AFL's final order (the file 09 also reads, so the
 # two scripts cannot disagree). Each club's picks are checked against the

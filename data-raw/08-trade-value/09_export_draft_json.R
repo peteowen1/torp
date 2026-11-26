@@ -45,7 +45,7 @@ stopifnot(n_order >= 54, identical(order$pick, seq_len(n_order)), !anyNA(order$h
 # (games x time on ground x rating above replacement, 10% discount a year).
 # A pick past the end of the curve takes the curve's last value (zero), as in 06.
 picks <- order[, .(pick, holder, original_club)]
-picks[, torp_value := round(curve$v8_direct[match(pmin(pick, max(curve$pick)), curve$pick)], 1)]
+picks[, torp_value := round(curve$v8_value[match(pmin(pick, max(curve$pick)), curve$pick)], 1)]
 # Points from the checked list in 06 (the curve's own dvi column is incomplete).
 dvi <- fread(file.path(out_dir, "06_dvi.csv"))
 picks <- merge(picks, dvi, by = "pick", all.x = TRUE)
@@ -59,7 +59,7 @@ out <- list(
   notes = list(
     # Reword after night one: the order is then no longer the 11 November one.
     order = sprintf("AFL final order, 11 November 2026 (%d picks). Compensation picks are added after night one.", n_order),
-    torp_value = "Expected eight-season TORP value of a player taken at the pick, discounted 10% a year.",
+    torp_value = "Expected eight-season TORP value of a player taken at the pick, discounted 10% a year. The shape of the curve is half our TORP fit and half career games by pick from the 1991-2015 drafts, so mid and late picks count for more than TORP alone gives them.",
     points = "Draft Value Index points (0 from pick 55).",
     bids = "Bid positions from Cal Twomey's Late Mail Phantom Draft (AFL.com.au, 18 November 2026), as the pick the bidding club starts the draft with. His top 30 has no bid on El Souki or Boi; they stay at 23 and 30 (30 is the first pick after Hawthorn's 29).",
     can_match = "The club can match if its shortfall is 412 points or less.",
