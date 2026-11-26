@@ -134,8 +134,12 @@ stopifnot(is.character(file_before), length(file_before) == 1L,
           is.numeric(n_rows_before) || is.integer(n_rows_before))
 
 # Deliberately NOT wrapped: an upload failure must halt loudly.
+# Keep the entry's own EP/WP model id: the default is the models published NOW,
+# which after a retrain would launder the drift check 4 of
+# check_vintage_alignment() exists to catch.
 publish_ratings_manifest(n_rows = n_rows_before, version = VERSION,
-                         file = file_before, set_canonical = FALSE)
+                         file = file_before, set_canonical = FALSE,
+                         pbp_model_id = if (is.null(entry$pbp_model_id)) NA_character_ else entry$pbp_model_id)
 
 # GitHub's CDN served a stale manifest for 84-114 seconds after each overwrite
 # on 2026-09-09/10, so poll the uncached url rather than trusting one read.

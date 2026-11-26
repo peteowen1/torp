@@ -8,7 +8,9 @@ published as canonical}
 check_vintage_alignment(
   strict = .strict_mode(),
   manifest = read_ratings_manifest(),
-  candidate = NULL
+  candidate = NULL,
+  pbp_model_id = NULL,
+  stale_seasons = NULL
 )
 }
 \arguments{
@@ -32,6 +34,13 @@ anyway made this guard block the exact remedy its own error message
 recommends. Still refused for a candidate: an unreadable manifest, and a
 label equal to the canonical one, which is a canonical write wearing a
 candidate flag.}
+
+\item{pbp_model_id}{The published EP/WP model id, or \code{NULL} to look it up
+(\code{\link[=.lookup_pbp_model_id]{.lookup_pbp_model_id()}}); injectable for tests.}
+
+\item{stale_seasons}{Seasons whose play-by-play stamps differ from the
+published models, or \code{NULL} to read \code{pbp_model_stamps.json}. Read only for
+an entry with no recorded models, under \code{strict}; injectable for tests.}
 }
 \value{
 Invisibly, \code{list(aligned = TRUE, canonical = canon)} on success, or
@@ -41,7 +50,7 @@ non-strict run grandfathers a gap it could not verify.
 \description{
 The border check \code{preserve_rating_vintage()} and \code{publish_ratings_manifest()}
 set up but never enforced: this is the choke point that would have stopped
-the 2026-07-27/28 incident on day one. Three checks, each a distinct failure
+the 2026-07-27/28 incident on day one. Four checks, each a distinct failure
 mode:
 }
 \details{
@@ -55,6 +64,11 @@ accept the grandfather case of a pre-manifest release).
 live constants after a JSON round-trip -- catching the subtler failure
 where a rating-defining constant was edited without bumping
 \code{RATING_VINTAGE}, so the label still matches while the maths changed.
+\item The canonical vintage's recorded \code{pbp_model_id} must match the EP/WP
+models published now. A retrain re-scores every play without touching a
+constant, so check 3 cannot see it (Pete 2026-11-27). An entry with no
+recorded id passes with a warning, under \code{strict} only when every
+season's play-by-play stamps match the published models.
 }
 }
 \keyword{internal}

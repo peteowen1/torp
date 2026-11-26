@@ -10,6 +10,7 @@ publish_ratings_manifest(
   file = NULL,
   set_canonical = FALSE,
   defining_constants = .rating_defining_constants(),
+  pbp_model_id = .lookup_pbp_model_id(),
   manifest = read_ratings_manifest(),
   allow_create = FALSE
 )
@@ -33,6 +34,11 @@ recording a vintage the running code did NOT generate (preserving an
 outgoing vintage), so the entry carries an explicit gap rather than a
 definition the data was never built under. See
 \code{.build_rating_vintage_entry()}.}
+
+\item{pbp_model_id}{EP/WP model id to record. \code{NA} means unknown: the id
+already recorded for \code{version} is kept (none is recorded when there is
+none), so a failed lookup never erases it. Pass \code{NA} when preserving an
+outgoing vintage (see \code{.build_rating_vintage_entry()}).}
 
 \item{manifest}{The manifest to merge into. Defaults to the published one.
 Pass a list only to rebuild a lost manifest, together with

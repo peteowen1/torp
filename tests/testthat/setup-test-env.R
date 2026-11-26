@@ -19,6 +19,10 @@ options(torp.data.repo = "peteowen1/torpdata")
 # Disable local data auto-detection during tests
 options(torp.local_data_dir = NULL)
 
+# Fixed EP/WP model id, so vintage entries and check_vintage_alignment() never
+# read torpmodels' manifest during tests (.lookup_pbp_model_id()).
+options(torp.pbp_model_id = "testmodel001")
+
 # Suppress specific warnings that are expected during testing
 suppressWarnings({
   # Load required packages for testing

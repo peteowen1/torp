@@ -39,7 +39,12 @@ clear_skip_markers()
 # RATINGS_VINTAGE is read BELOW, so resolve it here just for the guard: a
 # candidate write must be judged as a candidate, not as a canonical write.
 .vintage_for_guard <- if (exists("RATINGS_VINTAGE", envir = .GlobalEnv)) get("RATINGS_VINTAGE", envir = .GlobalEnv) else NULL
-torp:::check_vintage_alignment(strict = TRUE, candidate = .vintage_for_guard)
+# The EP/WP model id is read ONCE, here, and the same value is checked now and
+# recorded by the manifest write at the end, so a retrain published mid-run
+# cannot be stamped onto ratings built on the old models.
+.pbp_model_id_for_run <- torp:::.lookup_pbp_model_id()
+torp:::check_vintage_alignment(strict = TRUE, candidate = .vintage_for_guard,
+                               pbp_model_id = .pbp_model_id_for_run)
 
 # Source daily_release.R into a local env to get update_player_stats() and
 # update_teams() without leaking .release_cache and other globals.
@@ -525,7 +530,8 @@ if (nrow(torp_new) > 0) {
       nrow(torp_df_total),
       version = if (is.null(RATINGS_VINTAGE)) torp:::RATING_VINTAGE else RATINGS_VINTAGE,
       file = vintage_file,
-      set_canonical = is.null(RATINGS_VINTAGE)
+      set_canonical = is.null(RATINGS_VINTAGE),
+      pbp_model_id = .pbp_model_id_for_run
     ),
     # A failed manifest publish FAILS the run. It used to cli_warn(), which R
     # defers to the end of the script and folds into "There were 35 warnings":
