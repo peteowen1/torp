@@ -70,7 +70,8 @@ grade_year <- function(y) {
   # 2022_draftguru_final.html). So in trade 5 it went Fremantle to Collingwood.
   if (y == 2021L) {
     fx <- a[trade == 5 & item == "2022 third round pick (Fremantle)", which = TRUE]
-    stopifnot(length(fx) == 1, a$to_club[fx] == "Fremantle")
+    stopifnot("2021 trade 5 correction: the row is gone or already reads Collingwood (has Wikipedia fixed it? then delete this block)" =
+                length(fx) == 1 && a$to_club[fx] == "Fremantle")
     a[fx, c("to_club", "from_club") := .("Collingwood", "Fremantle")]
   }
 
