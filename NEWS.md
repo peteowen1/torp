@@ -1,4 +1,4 @@
-# torp (development version)
+# torp 1.12.0
 
 * **Rating vintage v18** (`RATING_VINTAGE <- "v18"`): every published rating moves. Besides the changes below, the 2021-2025 play-by-play is re-scored on the current EP/WP models (model id `c5cca7c569ff`, now stamped on every row and in `pbp_model_stamps.json`); in 98% of rows the expected points move (mean 0.10, largest 3.05), and 2026, already on these models, came out identical. v17 is kept as `torp_ratings_v17.parquet`.
 
