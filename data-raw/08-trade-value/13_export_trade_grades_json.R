@@ -29,7 +29,11 @@ assets[, `:=`(draftee = blank_na(as.character(draftee)), how = blank_na(how))]
 stopifnot(!anyNA(assets$how))
 # Rows valued partly by a forecast: still at the club (forecast to the window's
 # end) or traded on (the forecast for the rest of the window at that trade).
-still <- grepl("still there", assets$how) | (grepl("traded on", assets$how) & assets$how != "pick traded on")
+# Labels may end "(hand-traced)" (12, 2026-11-26); a pick traded on, or traded
+# on and then spent on a bid, is valued with no forecast.
+how_base <- sub(" (hand-traced)", "", assets$how, fixed = TRUE)
+still <- grepl("still there", how_base) |
+  (grepl("traded on", how_base) & !how_base %in% c("pick traded on", "traded on, then spent on a bid"))
 assets[, `:=`(played = round(fifelse(is.na(realised), 0, realised), 1),
               value = round(v_turned, 1))]
 # Forecast as the rounded difference, so played + forecast = value exactly in
