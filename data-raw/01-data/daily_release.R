@@ -490,6 +490,82 @@ update_fixtures <- function(season) {
   invisible(NULL)
 }
 
+#' Publish next season's fixture once the AFL has released it
+#'
+#' The nightly writes only the current season's fixture, and in the off-season
+#' it returns before writing anything, so next season's fixture (out from late
+#' October) never reached fixtures-data until get_afl_season() rolled over
+#' (fplverse reads its AFL schedule from that release; 2026-11-27). Runs on
+#' every nightly, whatever the release mode. A season the API does not have
+#' yet is the normal state for most of the year, so it is logged, not failed.
+#' Uploads only when the published file is missing or differs on the columns
+#' that describe the schedule, so an unchanged fixture is not re-uploaded
+#' every night.
+#'
+#' @param season Current season (from get_afl_season()).
+#' @return "next_season_fixtures" if anything failed (fetching the published
+#'   copy or uploading), else character(0). Never throws.
+update_next_season_fixtures <- function(season) {
+  # Optional side publish: whatever goes wrong here becomes a failure label,
+  # never an error, so it cannot stop the rest of the nightly (under
+  # VERSEBUS_STRICT, parquet_from_url() re-raises a transient CDN error).
+  tryCatch(.update_next_season_fixtures(season), error = function(e) {
+    cli::cli_alert_danger("Failed: next season's fixture: {conditionMessage(e)}")
+    "next_season_fixtures"
+  })
+}
+
+.update_next_season_fixtures <- function(season) {
+  nxt <- as.integer(season) + 1L
+  fixtures <- tryCatch(get_afl_fixtures(nxt), error = function(e) {
+    cli::cli_inform("No {nxt} fixture from the AFL API yet ({conditionMessage(e)})")
+    NULL
+  })
+  if (is.null(fixtures) || nrow(fixtures) == 0) return(character(0))
+
+  list_cols <- names(fixtures)[vapply(fixtures, is.list, logical(1))]
+  if (length(list_cols) > 0) fixtures <- fixtures[, !names(fixtures) %in% list_cols, drop = FALSE]
+
+  # What a schedule change moves: dates, venues, teams, status. Ids, not
+  # names, so the name normalisation save_to_release() applies cannot make an
+  # unchanged fixture look changed.
+  key <- intersect(c("match_id", "round_number", "utc_start_time", "status",
+                     "venue_id", "home_team_id", "away_team_id"), names(fixtures))
+  url <- generate_urls("fixtures-data", "fixtures", seasons = nxt)
+  published <- if (length(url) == 1) suppressWarnings(parquet_from_url(url)) else NULL
+  if (.same_schedule(fixtures, published, key)) {
+    cli::cli_inform("Next season's fixture ({nxt}) unchanged: {nrow(fixtures)} matches")
+    return(character(0))
+  }
+
+  tryCatch({
+    save_to_release(df = fixtures, file_name = glue::glue("fixtures_{nxt}"), release_tag = "fixtures-data")
+    cli::cli_inform("Saved next season's fixture: fixtures_{nxt} ({nrow(fixtures)} matches)")
+    character(0)
+  }, error = function(e) {
+    cli::cli_alert_danger("Failed: next season's fixture ({nxt}): {conditionMessage(e)}")
+    "next_season_fixtures"
+  })
+}
+
+#' TRUE when two fixture frames carry the same schedule on `key`
+#'
+#' Compared as text, row order ignored. FALSE when `published` is missing,
+#' empty or lacks a key column, or when `key` is empty.
+#' @keywords internal
+.same_schedule <- function(fresh, published, key) {
+  if (is.null(published) || nrow(published) == 0 || length(key) == 0 ||
+      !all(key %in% names(published)) || nrow(fresh) != nrow(published)) return(FALSE)
+  norm <- function(d) {
+    d <- as.data.frame(d)[, key, drop = FALSE]
+    d[] <- lapply(d, as.character)
+    d <- d[do.call(order, unname(d)), , drop = FALSE]
+    rownames(d) <- NULL
+    d
+  }
+  identical(norm(fresh), norm(published))
+}
+
 #' Update Results Data
 #'
 #' @param season Season year
@@ -1093,6 +1169,8 @@ run_daily_release <- function(force = FALSE) {
 
   # Determine release mode
   refit_failures <- character()
+  # Next season's fixture, every night (fplverse reads it; off-season included).
+  refit_failures <- c(refit_failures, update_next_season_fixtures(current_season))
   if (force || has_new_games()) {
     release_mode <- "full"
   } else {
@@ -1100,7 +1178,7 @@ run_daily_release <- function(force = FALSE) {
     # bump leaves the published bundle on the old vintage and the live path
     # refuses it (torp#307). Refit just that season. Checked before the lineup
     # check so a preseason of daily lineup changes cannot postpone it.
-    refit_failures <- .refit_stale_np_fit(current_season)
+    refit_failures <- c(refit_failures, .refit_stale_np_fit(current_season))
     # Report-only: which seasons' play-by-play is on old EP/WP models
     # (docs/plans/WPA-REFRESH-GUARD.md). Rebuilding 2021-2025 is part of v18.
     refit_failures <- c(refit_failures, .report_stale_pbp_models(current_season))
