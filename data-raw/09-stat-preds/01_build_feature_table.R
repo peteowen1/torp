@@ -12,6 +12,8 @@
 #   - opponent: what the opponent has conceded of each stat over its previous
 #     10 matches, relative to the league average before the match; the team's
 #     own rate the same way;
+#   - team strength: his side's and the opponent's EPR (named lineup, as of
+#     the round) and as-of xRAPM;
 #   - context: home/away, venue.
 # Coverage is asserted on every column: a column under its floor stops the
 # build (CLAUDE.md: assert coverage, not presence).
@@ -57,8 +59,8 @@ sr <- sr[, intersect(keep_sr, names(sr)), with = FALSE]
 setnames(sr, setdiff(names(sr), c("player_id", "season", "round")),
          paste0("sr_", setdiff(names(sr), c("player_id", "season", "round"))))
 
-tm <- rbindlist(lapply(SEASONS, function(s) as.data.table(load_teams(s))), fill = TRUE)
-tm <- unique(tm[, .(match_id, player_id, lineup_position)], by = c("match_id", "player_id"))
+tm_full <- rbindlist(lapply(SEASONS, function(s) as.data.table(load_teams(s))), fill = TRUE)
+tm <- unique(tm_full[, .(match_id, player_id, lineup_position)], by = c("match_id", "player_id"))
 
 # Ratings as of the round ----
 ft <- merge(ps[, c("player_id", "match_id", "season", "round", "match_date", "team", "opp", "home",
@@ -117,6 +119,39 @@ for (s in CORE) {
 }
 ft[, c(paste0("conc_", CORE), paste0("own_", CORE), paste0("lg_", CORE)) := NULL]
 
+# Team strength as of the round ----
+# The match model's own lineup aggregation (.build_team_ratings_df(), the
+# production helper, not a copy): EPR of the named side at its (season, round),
+# weighted by each slot's average time on ground, plus the as-of xRAPM snapshot.
+# Anchored 27 Nov 2026 against the honest backfill's home_epr: correlation
+# 0.9998 in each of 2022-2025 (n = 828 matches).
+# Team PSR is left out on purpose: the shipped PSR coefficients were fitted on
+# 2021-2024 margins and calculate_psr() pools its scale over every season, 2026
+# included, so it is not as of T (the honest backfill's per-season PSR differs
+# by 12 points a team in 2022). Player stat ratings are already in as sr_*.
+# The published predictions_<season> rows are not used either: 2021-2025 were
+# made on 12 Apr 2026 by models trained on those seasons (hindsight), and the
+# honest backfill covers only 2022 R4-2025, so a pre-match margin/total from
+# one generator for every season is still to build (STAT-PREDS-PLAN.md, T2).
+# Read the release copy explicitly: run from the torp root, the loader prefers a
+# cwd-relative data-raw/03-ratings/ file, which can be an old local build.
+xr_file <- file.path(tempdir(), "career_team_rapm_asof_AFLM.parquet")
+piggyback::pb_download(basename(xr_file), repo = "peteowen1/torpdata", tag = TEAM_RAPM_ASOF_RELEASE_TAG,
+                       dest = tempdir(), overwrite = TRUE)
+xr <- load_team_rapm_asof(comp = "AFLM", path = xr_file)
+stopifnot(!is.null(xr), nrow(xr) > 0)
+trt <- as.data.table(.build_team_ratings_df(as.data.frame(tm_full), load_torp_ratings(), NULL, xr))
+trt[, home := as.integer(team_type == "home")]
+str_cols <- c("epr", "epr_recv", "epr_disp", "epr_spoil", "xrapm")
+own_str <- trt[, c("match_id", "home", str_cols), with = FALSE]
+setnames(own_str, str_cols, paste0("team_", str_cols))
+opp_str <- copy(own_str)[, home := 1L - home]
+setnames(opp_str, paste0("team_", str_cols), paste0("opp_", str_cols))
+stopifnot(!anyDuplicated(own_str, by = c("match_id", "home")))
+ft <- merge(ft, own_str, by = c("match_id", "home"), all.x = TRUE)
+ft <- merge(ft, opp_str, by = c("match_id", "home"), all.x = TRUE)
+ft[, epr_diff := team_epr - opp_epr]
+
 # Coverage: assert, don't assume ----
 # Floors: what can legitimately be missing. A debut has no form or days-since
 # (games_before == 0); the first match of a team in 2021 has no conceded window;
@@ -129,6 +164,13 @@ cov[grepl("^opp_conc_ratio_|^team_rate_ratio_", column), floor := 0.99]
 cov[grepl("^sr_", column), floor := 0.99]
 cov[column %in% c("lineup_position", "named_pos_group", "venue_name"), floor := 0.99]
 cov[column == "sr_pos_group", floor := 0.95]
+# xRAPM snapshots start part-way through 2021 (57% of 2021 team-matches, 100%
+# after), so it is 0 rather than NA there; checked by season below.
+for (s in c("team_xrapm", "opp_xrapm")) {
+  nz <- ft[, .(nonzero = mean(get(s) != 0, na.rm = TRUE)), by = season]
+  say(s, " non-zero by season: ", paste(sprintf("%d %.2f", nz$season, nz$nonzero), collapse = ", "))
+  stopifnot(nz[season >= 2022, all(nonzero > 0.99)])
+}
 fwrite(cov, file.path(out_dir, "coverage.csv"))
 bad <- cov[coverage < floor]
 say("columns: ", ncol(ft), " | rows: ", nrow(ft), " | under their coverage floor: ", nrow(bad))
