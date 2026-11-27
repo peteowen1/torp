@@ -2477,7 +2477,7 @@ STAT_RATE_NONTOG_EXCLUDE_UNPLAYED <- TRUE
 #' \code{TRUE} such a player takes his club listing for the reference season
 #' (\code{listed_pos_group}, from the rosters given to
 #' \code{.prepare_stat_rating_data()}; never a later season's). Measured on the
-#' 2025 debuts, the miss per game falls from 5.23 to 3.57 disposals and 2.19 to
+#' 2025 debuts, the miss per game falls from 5.23 to 3.48 disposals and 2.19 to
 #' 0.68 hitouts (torpverse docs/plans/STAT-PREDS-PLAN.md, P5; Pete decided
 #' 2026-11-27 to fix it in the ratings). \code{FALSE} keeps the published
 #' behaviour (up to v18). It moves published stat ratings and so PSR, so it is
