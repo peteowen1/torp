@@ -932,8 +932,8 @@ test_that("player_name comes from the latest match, not the last row of the inpu
 
 # P5: a player with no games yet takes his club listing (STAT_RATE_LISTED_POS_PRIOR)
 
-test_that("the listing switch is off until its rating vintage", {
-  expect_false(STAT_RATE_LISTED_POS_PRIOR)
+test_that("the listing switch is on from v19", {
+  expect_true(STAT_RATE_LISTED_POS_PRIOR)
 })
 
 test_that(".prepare_stat_rating_data() records the club listing per season", {
@@ -966,6 +966,7 @@ mk_listing_data <- function() {
 ref_listing <- as.Date("2024-04-15")
 
 test_that("switch off: the listing column changes nothing", {
+  testthat::local_mocked_bindings(STAT_RATE_LISTED_POS_PRIOR = FALSE)
   dat <- mk_listing_data()
   plain <- data.table::copy(dat)[, listed_pos_group := NULL]
   suppressMessages({
@@ -978,9 +979,13 @@ test_that("switch off: the listing column changes nothing", {
 
 test_that("switch on: a player with no games yet takes his listing's position prior", {
   dat <- mk_listing_data()
-  suppressMessages(off <- .estimate_stat_ratings_batch(dat, ref_listing, compute_ci = FALSE)[[1]])
+  off <- local({
+    testthat::local_mocked_bindings(STAT_RATE_LISTED_POS_PRIOR = FALSE, .package = "torp")
+    suppressMessages(.estimate_stat_ratings_batch(dat, ref_listing, compute_ci = FALSE)[[1]])
+  })
   testthat::local_mocked_bindings(STAT_RATE_LISTED_POS_PRIOR = TRUE)
   suppressMessages(on <- .estimate_stat_ratings_batch(dat, ref_listing, compute_ci = FALSE)[[1]])
+  expect_true(is.na(off[player_id == "NEW"]$pos_group))
   expect_equal(on[player_id == "NEW"]$pos_group, "RUCK")
   expect_equal(on[player_id == "NEW"]$n_games, 0)
   # With no games the rating is the prior: the ruck average, far above the league one

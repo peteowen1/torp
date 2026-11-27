@@ -1182,8 +1182,17 @@ PSR_POSITION_STANDARDISE <- TRUE
 #' Preserve v17 with \code{data-raw/03-ratings/promote_rating_vintage.R}
 #' (PROMOTE_FROM=v17, PROMOTE_TO=v18) and move the manifest to canonical v18
 #' BEFORE this reaches main.
+#'
+#' v19 (2026-11-27): a player with no games before a stat rating's reference
+#' date takes his club listing's position prior instead of the league's
+#' (\code{STAT_RATE_LISTED_POS_PRIOR} on; torpverse docs/plans/STAT-PREDS-PLAN.md
+#' P5). Moves the stat ratings of players with no earlier games, and through
+#' them PSR and TORP. Preserve v18 with
+#' \code{data-raw/03-ratings/promote_rating_vintage.R} (PROMOTE_FROM=v18,
+#' PROMOTE_TO=v19) and move the manifest to canonical v19 BEFORE this reaches
+#' main.
 #' @keywords internal
-RATING_VINTAGE <- "v18"
+RATING_VINTAGE <- "v19"
 
 #' Map from the 20-way team-sheet lineup position to a 6-way position group
 #'
@@ -2479,9 +2488,8 @@ STAT_RATE_NONTOG_EXCLUDE_UNPLAYED <- TRUE
 #' \code{.prepare_stat_rating_data()}; never a later season's). Measured on the
 #' 2025 debuts, the miss per game falls from 5.23 to 3.48 disposals and 2.19 to
 #' 0.68 hitouts (torpverse docs/plans/STAT-PREDS-PLAN.md, P5; Pete decided
-#' 2026-11-27 to fix it in the ratings). \code{FALSE} keeps the published
-#' behaviour (up to v18). It moves published stat ratings and so PSR, so it is
-#' turned on only in a new rating vintage, which also adds it to
-#' \code{.rating_defining_constants()}.
+#' 2026-11-27 to fix it in the ratings). \code{FALSE} is the behaviour published
+#' up to v18; \code{TRUE} from v19. It moves published stat ratings and so PSR,
+#' and it is in \code{.rating_defining_constants()}.
 #' @keywords internal
-STAT_RATE_LISTED_POS_PRIOR <- FALSE
+STAT_RATE_LISTED_POS_PRIOR <- TRUE

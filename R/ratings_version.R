@@ -359,7 +359,10 @@
     # rating_points_* skill ratings, which no PSR/OSR/DSR coefficient reads, so
     # TORP does not move -- wired anyway so a flip of a flag that changes
     # published numbers is never invisible to the guard (review, 2026-11-26).
-    STAT_RATE_NONTOG_EXCLUDE_UNPLAYED = STAT_RATE_NONTOG_EXCLUDE_UNPLAYED
+    STAT_RATE_NONTOG_EXCLUDE_UNPLAYED = STAT_RATE_NONTOG_EXCLUDE_UNPLAYED,
+    # v19. A player with no games yet takes his club listing's position prior;
+    # moves the stat ratings of those players, and through them PSR and TORP.
+    STAT_RATE_LISTED_POS_PRIOR = STAT_RATE_LISTED_POS_PRIOR
   )
 }
 
