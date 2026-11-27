@@ -503,8 +503,19 @@ update_fixtures <- function(season) {
 #' every night.
 #'
 #' @param season Current season (from get_afl_season()).
-#' @return "next_season_fixtures" if the upload failed, else character(0).
+#' @return "next_season_fixtures" if anything failed (fetching the published
+#'   copy or uploading), else character(0). Never throws.
 update_next_season_fixtures <- function(season) {
+  # Optional side publish: whatever goes wrong here becomes a failure label,
+  # never an error, so it cannot stop the rest of the nightly (under
+  # VERSEBUS_STRICT, parquet_from_url() re-raises a transient CDN error).
+  tryCatch(.update_next_season_fixtures(season), error = function(e) {
+    cli::cli_alert_danger("Failed: next season's fixture: {conditionMessage(e)}")
+    "next_season_fixtures"
+  })
+}
+
+.update_next_season_fixtures <- function(season) {
   nxt <- as.integer(season) + 1L
   fixtures <- tryCatch(get_afl_fixtures(nxt), error = function(e) {
     cli::cli_inform("No {nxt} fixture from the AFL API yet ({conditionMessage(e)})")
@@ -1167,7 +1178,7 @@ run_daily_release <- function(force = FALSE) {
     # bump leaves the published bundle on the old vintage and the live path
     # refuses it (torp#307). Refit just that season. Checked before the lineup
     # check so a preseason of daily lineup changes cannot postpone it.
-    refit_failures <- .refit_stale_np_fit(current_season)
+    refit_failures <- c(refit_failures, .refit_stale_np_fit(current_season))
     # Report-only: which seasons' play-by-play is on old EP/WP models
     # (docs/plans/WPA-REFRESH-GUARD.md). Rebuilding 2021-2025 is part of v18.
     refit_failures <- c(refit_failures, .report_stale_pbp_models(current_season))
