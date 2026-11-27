@@ -796,6 +796,72 @@ update_player_details <- function(season) {
   invisible(NULL)
 }
 
+#' Publish next season's player details (club lists) once the AFL has them
+#'
+#' Same shape as [update_next_season_fixtures()] (#340). The nightly writes
+#' player details only for `get_afl_season()` and only when it is not skipped
+#' (new games or changed lineups), so with no games from October to March
+#' `player_details_<next>.parquet` would first appear when round 1 lineups go up,
+#' days before fplverse needs it for its round 1 forecast. Runs every night,
+#' whatever the release mode. A season the API does not have yet is the normal
+#' state for most of the year, so it is logged, not failed. Uploads only when the
+#' published file is missing or the lists differ (player, club, jumper,
+#' position), so an unchanged list is not re-uploaded every night but trades and
+#' delistings are picked up.
+#'
+#' Note: before the AFL sets up the new lists, its squads endpoint returns the
+#' previous season's squads under the new season id (checked 2026-11-27: the
+#' 2027 call returned the same 812 players on the same clubs as 2026), so the
+#' first file is a copy of the old lists until the AFL changes them.
+#'
+#' @param season Current season (from get_afl_season()).
+#' @return "next_season_player_details" if anything failed (fetching the
+#'   published copy or uploading), else character(0). Never throws.
+update_next_season_player_details <- function(season) {
+  tryCatch(.update_next_season_player_details(season), error = function(e) {
+    cli::cli_alert_danger("Failed: next season's player details: {conditionMessage(e)}")
+    "next_season_player_details"
+  })
+}
+
+.update_next_season_player_details <- function(season) {
+  nxt <- as.integer(season) + 1L
+  details <- tryCatch(get_afl_player_details(nxt), error = function(e) {
+    cli::cli_inform("No {nxt} player details from the AFL API yet ({conditionMessage(e)})")
+    NULL
+  })
+  if (is.null(details) || nrow(details) == 0) return(character(0))
+
+  # get_afl_player_details() only warns, and returns the clubs that did answer,
+  # when some squads fail. Do not publish a partial list; the next night retries.
+  n_clubs <- length(unique(details$team))
+  if (n_clubs < nrow(AFL_TEAMS)) {
+    cli::cli_inform("Next season's player details ({nxt}) cover {n_clubs} of {nrow(AFL_TEAMS)} clubs; not publishing")
+    return(character(0))
+  }
+
+  key <- intersect(c("player_id", "team_provider_id", "jumper_number", "position"), names(details))
+  # Built directly: generate_urls() drops a season after the current one when it
+  # cannot list the release, which would make every night look like a change.
+  # A missing file reads as an empty frame, which counts as changed.
+  url <- paste0("https://github.com/", get_torp_data_repo(),
+                "/releases/download/player_details-data/player_details_", nxt, ".parquet")
+  published <- suppressWarnings(parquet_from_url(url))
+  if (.same_schedule(details, published, key)) {
+    cli::cli_inform("Next season's player details ({nxt}) unchanged: {nrow(details)} players")
+    return(character(0))
+  }
+
+  tryCatch({
+    save_to_release(df = details, file_name = glue::glue("player_details_{nxt}"), release_tag = "player_details-data")
+    cli::cli_inform("Saved next season's player details: player_details_{nxt} ({nrow(details)} players)")
+    character(0)
+  }, error = function(e) {
+    cli::cli_alert_danger("Failed: next season's player details ({nxt}): {conditionMessage(e)}")
+    "next_season_player_details"
+  })
+}
+
 # Derived Data Functions ----
 # These run after upstream data is updated, computing derived datasets
 # from already-released data (PBP, player_game_data, etc.)
@@ -1171,6 +1237,8 @@ run_daily_release <- function(force = FALSE) {
   refit_failures <- character()
   # Next season's fixture, every night (fplverse reads it; off-season included).
   refit_failures <- c(refit_failures, update_next_season_fixtures(current_season))
+  # ...and its club lists (fplverse's round 1 forecast reads them in March).
+  refit_failures <- c(refit_failures, update_next_season_player_details(current_season))
   if (force || has_new_games()) {
     release_mode <- "full"
   } else {
