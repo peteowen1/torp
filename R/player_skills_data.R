@@ -365,7 +365,62 @@
     out <- data.table::rbindlist(list(out, zero_rows), fill = TRUE)
   }
 
+  # The club listing per (player, season), straight from the rosters. Unlike
+  # pos_group on the availability rows above, which is the modal position of
+  # ALL his games (later ones included), this is known before he plays, so the
+  # estimators can use it as his position before his first game
+  # (STAT_RATE_LISTED_POS_PRIOR).
+  if (!is.null(rosters)) {
+    rdt <- data.table::as.data.table(rosters)
+    if (all(c("player_id", "season", "position") %in% names(rdt))) {
+      listed <- rdt[, .(player_id, .season = as.integer(season),
+                        listed_pos_group = .map_position_group(position))]
+      listed <- unique(listed[!is.na(listed_pos_group)], by = c("player_id", ".season"))
+      out[, .season := as.integer(season)]
+      out[listed, listed_pos_group := i.listed_pos_group, on = c("player_id", ".season")]
+      out[, .season := NULL]
+    }
+  }
+
   out
+}
+
+#' Club listing per (player, season), for the stat-rating position fallback
+#'
+#' @param dt Stat-rating data from \code{.prepare_stat_rating_data()}.
+#' @return A keyed data.table (player_id, season, listed_pos_group), or NULL
+#'   when \code{STAT_RATE_LISTED_POS_PRIOR} is off or the data has no listing.
+#' @keywords internal
+.listed_pos_lookup <- function(dt) {
+  if (!isTRUE(STAT_RATE_LISTED_POS_PRIOR) || !"listed_pos_group" %in% names(dt)) return(NULL)
+  keep <- !is.na(dt[["listed_pos_group"]])
+  lk <- data.table::data.table(player_id = dt[["player_id"]][keep],
+                               season = as.integer(dt[["season"]][keep]),
+                               listed_pos_group = dt[["listed_pos_group"]][keep])
+  lk <- unique(lk, by = c("player_id", "season"))
+  if (nrow(lk) == 0) return(NULL)
+  data.table::setkeyv(lk, c("player_id", "season"))
+  lk
+}
+
+#' Fill a missing position from the club listing as of the reference season
+#'
+#' Only rows whose \code{pos_group} is NA change. The listing is the one for the
+#' reference season, else the latest earlier one; a later season's never is.
+#'
+#' @param meta data.table with \code{player_id} and \code{pos_group}; modified
+#'   by reference.
+#' @param lk Output of \code{.listed_pos_lookup()} (NULL: no change).
+#' @param ref_season Integer season of each row's reference date.
+#' @return \code{meta}, invisibly.
+#' @keywords internal
+.fill_pos_from_listing <- function(meta, lk, ref_season) {
+  if (is.null(lk) || nrow(meta) == 0) return(invisible(meta))
+  q <- data.table::data.table(player_id = meta$player_id, season = as.integer(ref_season))
+  hit <- lk[q, on = c("player_id", "season"), roll = TRUE, x.listed_pos_group]
+  fill <- is.na(meta$pos_group) & !is.na(hit)
+  if (any(fill)) meta[fill, pos_group := hit[fill]]
+  invisible(meta)
 }
 
 

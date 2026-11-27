@@ -929,3 +929,90 @@ test_that("player_name comes from the latest match, not the last row of the inpu
     dat, max(dat$match_date_rating) + 1L, compute_ci = FALSE)[[1]])
   expect_equal(batch[player_id == "1"]$player_name, "Renamed Player")
 })
+
+# P5: a player with no games yet takes his club listing (STAT_RATE_LISTED_POS_PRIOR)
+
+test_that("the listing switch is off until its rating vintage", {
+  expect_false(STAT_RATE_LISTED_POS_PRIOR)
+})
+
+test_that(".prepare_stat_rating_data() records the club listing per season", {
+  pgd <- data.table::data.table(
+    player_id = c("P1", "P1"), match_id = c("M1", "M2"), player_name = "A One",
+    season = c(2024, 2025), round = 1L,
+    utc_start_time = c("2024-03-14T09:00:00.000+0000", "2025-03-14T09:00:00.000+0000"),
+    time_on_ground_percentage = 80, position = "MIDFIELDER", disposals = 10)
+  ps <- data.table::data.table(player_id = "P1", match_id = c("M1", "M2"), disposal_efficiency = 70)
+  rosters <- data.table::data.table(player_id = "P1", season = c(2024, 2025), team = "T",
+                                    position = c("KEY_FORWARD", "RUCK"))
+  out <- .prepare_stat_rating_data(pgd, ps, rosters = rosters)
+  expect_equal(out[season == 2024, unique(listed_pos_group)], "KEY_FORWARD")
+  expect_equal(out[season == 2025, unique(listed_pos_group)], "RUCK")
+  # No rosters, no listing column
+  expect_false("listed_pos_group" %in% names(.prepare_stat_rating_data(pgd, ps)))
+})
+
+mk_listing_data <- function() {
+  dat <- create_mock_stat_rating_data()
+  dat[, pos_group := c(DEF = "KEY_DEFENDER", MID = "MIDFIELDER",
+                       FWD = "KEY_FORWARD", RUCK = "RUCK")[pos_group]]
+  dat[, listed_pos_group := pos_group]
+  # A ruck whose first game comes after the reference date
+  new <- data.table::copy(dat[player_id == "4"])
+  new[, `:=`(player_id = "NEW", player_name = "New Ruck", pos_group = NA_character_,
+             match_id = paste0(match_id, "_new"), match_date_rating = match_date_rating + 120L)]
+  rbind(dat, new)
+}
+ref_listing <- as.Date("2024-04-15")
+
+test_that("switch off: the listing column changes nothing", {
+  dat <- mk_listing_data()
+  plain <- data.table::copy(dat)[, listed_pos_group := NULL]
+  suppressMessages({
+    a <- .estimate_stat_ratings_batch(dat, ref_listing, compute_ci = FALSE)[[1]]
+    b <- .estimate_stat_ratings_batch(plain, ref_listing, compute_ci = FALSE)[[1]]
+  })
+  expect_identical(a, b)
+  expect_true(is.na(a[player_id == "NEW"]$pos_group))
+})
+
+test_that("switch on: a player with no games yet takes his listing's position prior", {
+  dat <- mk_listing_data()
+  suppressMessages(off <- .estimate_stat_ratings_batch(dat, ref_listing, compute_ci = FALSE)[[1]])
+  testthat::local_mocked_bindings(STAT_RATE_LISTED_POS_PRIOR = TRUE)
+  suppressMessages(on <- .estimate_stat_ratings_batch(dat, ref_listing, compute_ci = FALSE)[[1]])
+  expect_equal(on[player_id == "NEW"]$pos_group, "RUCK")
+  expect_equal(on[player_id == "NEW"]$n_games, 0)
+  # With no games the rating is the prior: the ruck average, far above the league one
+  expect_gt(on[player_id == "NEW"]$hitouts_rating, 3 * off[player_id == "NEW"]$hitouts_rating)
+  # Everyone with games is untouched
+  rest_on <- on[player_id != "NEW"]; rest_off <- off[player_id != "NEW"]
+  data.table::setkey(rest_on, player_id); data.table::setkey(rest_off, player_id)
+  expect_identical(rest_on, rest_off)
+})
+
+test_that("switch on: a later season's listing is never used", {
+  dat <- mk_listing_data()
+  dat[player_id == "NEW", listed_pos_group := NA_character_]
+  later <- data.table::copy(dat[player_id == "NEW"][1])
+  later[, `:=`(season = 2025, listed_pos_group = "RUCK", avail_only = TRUE, tog = 0,
+               match_id = "AVAIL_2025_01", match_date_rating = as.Date("2025-03-14"))]
+  dat <- rbind(dat, later)
+  testthat::local_mocked_bindings(STAT_RATE_LISTED_POS_PRIOR = TRUE)
+  suppressMessages(on <- .estimate_stat_ratings_batch(dat, ref_listing, compute_ci = FALSE)[[1]])
+  expect_true(is.na(on[player_id == "NEW"]$pos_group))
+})
+
+test_that("switch on: batch and single-date estimators still agree", {
+  dat <- mk_listing_data()[player_id != "NEW"]
+  dat[player_id == "2", pos_group := NA_character_]  # games, but no position from them
+  testthat::local_mocked_bindings(STAT_RATE_LISTED_POS_PRIOR = TRUE)
+  single <- estimate_player_stat_ratings(dat, ref_date = ref_listing, compute_ci = FALSE)
+  suppressMessages(batch <- .estimate_stat_ratings_batch(dat, ref_listing, compute_ci = FALSE)[[1]])
+  data.table::setkey(single, player_id); data.table::setkey(batch, player_id)
+  expect_equal(single[player_id == "2"]$pos_group, "MIDFIELDER")
+  expect_equal(batch[player_id == "2"]$pos_group, "MIDFIELDER")
+  for (cn in grep("_rating$", names(single), value = TRUE)) {
+    expect_equal(batch[[cn]], single[[cn]], tolerance = 1e-8, info = cn)
+  }
+})

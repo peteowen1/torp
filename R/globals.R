@@ -140,7 +140,7 @@ utils::globalVariables(c(
 
 # Skill estimation variables
 utils::globalVariables(c(
-  "avail_only", ".played", "roster_pos_group",
+  "avail_only", ".played", "roster_pos_group", "listed_pos_group", "i.listed_pos_group", "x.listed_pos_group",
   "round_idx", "first_season", "first_round",
   "tog", "tog_denominator", "match_date_rating", "days_since", "decay_wt",
   "wt_attempts",

@@ -1,3 +1,7 @@
+# torp 1.13.1
+
+* Stat ratings can give a player with no games yet his club listing's position, so his prior is his position's average rather than the league's (new switch `STAT_RATE_LISTED_POS_PRIOR`, **off**: published numbers are unchanged until a rating vintage turns it on). `.prepare_stat_rating_data()` now records `listed_pos_group` per (player, season) from the rosters; the estimators use the reference season's listing, else an earlier one, never a later one. Measured on the 2025 data with the switch on: only the 2,007 of 32,538 rating rows with no games before them move, and on the 100 debut games the average miss falls from 5.23 to 3.48 disposals and 2.19 to 0.68 hitouts (no core stat gets worse). torpverse `docs/plans/STAT-PREDS-PLAN.md` P5.
+
 # torp 1.13.0
 
 * Removed `calculate_player_attribution()` and `batch_player_attribution()` (`R/player_attribution.R`). Nothing in torp, torpdata, torpmodels or the blog called them (architecture review F, 2026-08-11; checked again 2026-11-27), and they carried three known low bugs (codebase review A169-A171). Call sites outside these repos will break; the last version with them is 1.12.1.
