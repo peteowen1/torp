@@ -241,6 +241,10 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
     }
     out
   }, by = player_id]
+  # The listing is a season fact known before the season, so it is read from
+  # the full input, as the batch estimator does, not only rows before ref_date.
+  .fill_pos_from_listing(player_meta, .listed_pos_lookup(stat_rating_data),
+                         rep(as.integer(format(ref_date, "%Y")), nrow(player_meta)))
   if (has_lineup) {
     player_meta <- .add_lineup_pos_group(player_meta)
     player_meta[, lineup_position := NULL]
@@ -839,6 +843,10 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
   pos_joined[has_any, pos_group := pos_groups_alpha[modal_idx[has_any]]]
   # pos_meta: (player_id, ref_idx, pos_group) — per-ref_date modal position
   pos_meta <- pos_joined[, .(player_id, ref_idx, pos_group)]
+  # No games before this ref_date: his club listing for that season
+  # (STAT_RATE_LISTED_POS_PRIOR; off = published behaviour).
+  .fill_pos_from_listing(pos_meta, .listed_pos_lookup(dt),
+                         as.integer(format(ref_dates_sorted[pos_meta$ref_idx], "%Y")))
 
   # === Rolling-join lookup helper ===
   # Given a cumsum table (grp, match_date_rating, cum_num, cum_den) sorted
