@@ -14,6 +14,7 @@
 #     own rate the same way;
 #   - team strength: his side's and the opponent's EPR (named lineup, as of
 #     the round) and as-of xRAPM;
+#   - travel: km from his and the opponent's home ground, interstate, team rest;
 #   - context: home/away, venue.
 # Coverage is asserted on every column: a column under its floor stops the
 # build (CLAUDE.md: assert coverage, not presence).
@@ -152,6 +153,30 @@ ft <- merge(ft, own_str, by = c("match_id", "home"), all.x = TRUE)
 ft <- merge(ft, opp_str, by = c("match_id", "home"), all.x = TRUE)
 ft[, epr_diff := team_epr - opp_epr]
 
+# Travel ----
+# Venue coordinates per match from the weather table (every match has a row).
+# A team's home ground is its most common home venue over 2021-2026, as the
+# match model does (.build_match_features()); clubs' home grounds did not move
+# in this window, so using later seasons for it reveals nothing about results.
+# Distance is great-circle km from home ground to venue, for him and the opponent.
+wx <- as.data.table(load_weather())[, .(match_id, home_team_name, lat = Latitude, lon = Longitude)]
+stopifnot(!anyDuplicated(wx$match_id), !anyNA(wx$lat), !anyNA(wx$lon))
+home_ground <- wx[, .N, by = .(team = home_team_name, lat, lon)][order(team, -N)][, .SD[1], by = team]
+say("home grounds found: ", nrow(home_ground), " teams")
+venue_xy <- wx[, .(match_id, v_lat = lat, v_lon = lon)]
+ft <- merge(ft, venue_xy, by = "match_id", all.x = TRUE)
+ft <- merge(ft, home_ground[, .(team, t_lat = lat, t_lon = lon)], by = "team", all.x = TRUE)
+ft <- merge(ft, home_ground[, .(opp = team, o_lat = lat, o_lon = lon)], by = "opp", all.x = TRUE)
+ft[, `:=`(travel_km = geosphere::distHaversine(cbind(v_lon, v_lat), cbind(t_lon, t_lat)) / 1000,
+          opp_travel_km = geosphere::distHaversine(cbind(v_lon, v_lat), cbind(o_lon, o_lat)) / 1000)]
+ft[, interstate := as.integer(travel_km > 300)]
+ft[, c("v_lat", "v_lon", "t_lat", "t_lon", "o_lat", "o_lon") := NULL]
+# Team's days since its previous match (the player's own is days_since_last).
+tdays <- unique(ft[, .(match_id, team, match_date)])
+setorder(tdays, team, match_date)
+tdays[, team_days_rest := as.numeric(match_date - shift(match_date)), by = team]
+ft <- merge(ft, tdays[, .(match_id, team, team_days_rest)], by = c("match_id", "team"), all.x = TRUE)
+
 # Coverage: assert, don't assume ----
 # Floors: what can legitimately be missing. A debut has no form or days-since
 # (games_before == 0); the first match of a team in 2021 has no conceded window;
@@ -160,6 +185,7 @@ setorder(ft, match_date, match_id, player_id)
 cov <- data.table(column = names(ft), coverage = vapply(ft, function(x) mean(!is.na(x)), numeric(1)))
 cov[, floor := 0.999]
 cov[grepl("_last[135]$|^tog_last|days_since_last", column), floor := 0.97]
+cov[column == "team_days_rest", floor := 0.99]  # NA only on each team's first match
 cov[grepl("^opp_conc_ratio_|^team_rate_ratio_", column), floor := 0.99]
 cov[grepl("^sr_", column), floor := 0.99]
 cov[column %in% c("lineup_position", "named_pos_group", "venue_name"), floor := 0.99]
