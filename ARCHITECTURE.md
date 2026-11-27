@@ -513,7 +513,6 @@ Functions: `torp_replace_teams()`, `torp_team_abbr()`, `torp_team_full()`, `torp
 | Centrality | `R/centrality.R` | `calculate_player_centrality()` |
 | Opponent Adj (Stats) | `R/opponent_adjustment.R` | `adjust_stat_ratings_for_opponents()`, `adjust_stats_for_opponents()` |
 | Opponent Adj (EPV) | `R/epv_opponent_adjustment.R` | `adjust_epv_for_opponents()` |
-| Player Attribution | `R/player_attribution.R` | `calculate_player_attribution()`, `batch_player_attribution()` |
 | Stat Rating Data | `R/player_skills_data.R` | Data preparation for stat rating estimation |
 | Stat Rating Profiles | `R/player_skills_profile.R` | `player_stat_rating_profile()`, `get_player_stat_ratings()` |
 | WP Credit | `R/wp_credit.R` | `create_wp_credit()` (WPA credit allocation) |
