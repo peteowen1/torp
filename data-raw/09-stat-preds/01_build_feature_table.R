@@ -114,7 +114,11 @@ setorder(own, team, match_date, match_id)
 for (s in CORE) own[, (paste0("own_", s)) := shift(frollmean(get(s), OPP_WINDOW, align = "right", partial = TRUE)), by = team]
 ft <- merge(ft, conc[, c("match_id", "opp", paste0("conc_", CORE)), with = FALSE], by = c("match_id", "opp"), all.x = TRUE)
 ft <- merge(ft, own[, c("match_id", "team", paste0("own_", CORE)), with = FALSE], by = c("match_id", "team"), all.x = TRUE)
-ft <- merge(ft, lg_cum, by = "match_date", all.x = TRUE)
+# lg_cum on date d averages every team-match dated strictly before d. It is
+# joined on the round's ref date T, not the match date, so a Sunday match does
+# not see Thursday-Saturday of its own round (review, 28 Nov 2026).
+stopifnot(all(unique(ft$sr_ref_date) %in% lg_cum$match_date))
+ft <- merge(ft, setnames(copy(lg_cum), "match_date", "sr_ref_date"), by = "sr_ref_date", all.x = TRUE)
 for (s in CORE) {
   ft[, (paste0("opp_conc_ratio_", s)) := get(paste0("conc_", s)) / get(paste0("lg_", s))]
   ft[, (paste0("team_rate_ratio_", s)) := get(paste0("own_", s)) / get(paste0("lg_", s))]
@@ -153,6 +157,17 @@ stopifnot(!anyDuplicated(own_str, by = c("match_id", "home")))
 ft <- merge(ft, own_str, by = c("match_id", "home"), all.x = TRUE)
 ft <- merge(ft, opp_str, by = c("match_id", "home"), all.x = TRUE)
 ft[, epr_diff := team_epr - opp_epr]
+# The helper fills missing EPR with the prior, so team_epr is never NA and the
+# coverage floor cannot see a failed ratings join (review, 28 Nov 2026). Count
+# the named players with no EPR at their round directly, per season.
+tr_keys <- unique(as.data.table(load_torp_ratings())[!is.na(epr), .(player_id, season = as.integer(season), round_number = as.integer(round))])
+lu <- unique(tm_full[lineup_position != "EMERG" | is.na(lineup_position), .(match_id, player_id, season = as.integer(season), round_number = as.integer(round_number))])
+lu[, rated := FALSE][tr_keys, rated := TRUE, on = .(player_id, season, round_number)]
+prior_share <- lu[, .(named = .N, prior_filled = mean(!rated)), by = season][order(season)]
+say("named players given the EPR prior, by season: ", paste(sprintf("%d %.3f (n=%d)", prior_share$season, prior_share$prior_filled, prior_share$named), collapse = ", "))
+stopifnot(prior_share[season >= 2022, all(prior_filled < 0.05)], nrow(prior_share) == length(SEASONS))
+sd_epr <- ft[, .(sd = sd(team_epr)), by = season]
+stopifnot(sd_epr[, all(sd > 3)])
 
 # Travel ----
 # Venue coordinates per match from the weather table (every match has a row).
@@ -193,7 +208,7 @@ ft <- merge(ft, ko, by = "match_id", all.x = TRUE)
 stopifnot(!anyNA(ft$kickoff))
 ft[, fc_lead_days := pmin(7L, as.integer(ceiling(as.numeric(difftime(
   kickoff, as.POSIXct(sr_ref_date, tz = "UTC"), units = "hours")) / 24)))]
-stopifnot(ft[, all(fc_lead_days >= 1L)])
+stopifnot(!anyNA(ft$fc_lead_days), ft[, all(fc_lead_days >= 1L)])
 say("forecast lead (days before kickoff, issued by T): ", paste(names(table(ft$fc_lead_days)), table(ft$fc_lead_days), sep = ":", collapse = " "))
 n_capped <- ft[as.numeric(difftime(kickoff, as.POSIXct(sr_ref_date, tz = "UTC"), units = "hours")) > 7 * 24, uniqueN(match_id)]
 say("matches where T is over 7 days before kickoff (lead capped at 7, so the forecast is a little after T): ", n_capped)
