@@ -950,6 +950,9 @@ test_that(".prepare_stat_rating_data() records the club listing per season", {
   expect_equal(out[season == 2025, unique(listed_pos_group)], "RUCK")
   # No rosters, no listing column
   expect_false("listed_pos_group" %in% names(.prepare_stat_rating_data(pgd, ps)))
+  # Team-sheet rosters (the AFLW path) are not a pre-debut listing
+  expect_false("listed_pos_group" %in% names(
+    .prepare_stat_rating_data(pgd, ps, rosters = rosters, rosters_are_listings = FALSE)))
 })
 
 mk_listing_data <- function() {

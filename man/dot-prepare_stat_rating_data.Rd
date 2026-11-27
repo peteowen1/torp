@@ -9,7 +9,8 @@
   player_stats,
   rosters = NULL,
   fixtures = NULL,
-  teams = NULL
+  teams = NULL,
+  rosters_are_listings = TRUE
 )
 }
 \arguments{
@@ -25,6 +26,14 @@
 \code{pos_group} assignment of rostered-but-never-played players whose
 roster \code{position} doesn't map (e.g. fringe bench players with only
 one FPL appearance).}
+
+\item{rosters_are_listings}{Logical. TRUE (default) when \code{rosters} is
+the clubs' season list (\code{load_player_details()}), whose
+\code{position} is known before a player's first game, so it is recorded
+as \code{listed_pos_group} for the debut prior
+(\code{STAT_RATE_LISTED_POS_PRIOR}). FALSE when \code{rosters} is built
+from team sheets (the AFLW path), whose position can come from a later
+match, so no listing is recorded and the prior stays league-wide.}
 }
 \value{
 A data.table with one row per player-match containing:

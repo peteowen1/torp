@@ -62,7 +62,11 @@
     player_stats = ps,
     rosters = rosters_aflw,
     fixtures = fixtures,
-    teams = teams
+    teams = teams,
+    # These "rosters" are team sheets across the season, not a club list known
+    # before a debut, so no debut-prior listing (STAT_RATE_LISTED_POS_PRIOR);
+    # AFLW is also outside the men's rating vintage. AFLW is unchanged by v19.
+    rosters_are_listings = FALSE
   )
 }
 

@@ -152,6 +152,13 @@
 #'   \code{pos_group} assignment of rostered-but-never-played players whose
 #'   roster \code{position} doesn't map (e.g. fringe bench players with only
 #'   one FPL appearance).
+#' @param rosters_are_listings Logical. TRUE (default) when \code{rosters} is
+#'   the clubs' season list (\code{load_player_details()}), whose
+#'   \code{position} is known before a player's first game, so it is recorded
+#'   as \code{listed_pos_group} for the debut prior
+#'   (\code{STAT_RATE_LISTED_POS_PRIOR}). FALSE when \code{rosters} is built
+#'   from team sheets (the AFLW path), whose position can come from a later
+#'   match, so no listing is recorded and the prior stays league-wide.
 #'
 #' @return A data.table with one row per player-match containing:
 #'   identifiers (player_id, match_id, player_name, season, round, team),
@@ -161,7 +168,8 @@
 #' @importFrom data.table as.data.table
 #' @keywords internal
 .prepare_stat_rating_data <- function(player_game_data, player_stats, rosters = NULL,
-                               fixtures = NULL, teams = NULL) {
+                               fixtures = NULL, teams = NULL,
+                               rosters_are_listings = TRUE) {
   pgd <- data.table::as.data.table(player_game_data)
   ps <- data.table::as.data.table(player_stats)
 
@@ -369,8 +377,9 @@
   # pos_group on the availability rows above, which is the modal position of
   # ALL his games (later ones included), this is known before he plays, so the
   # estimators can use it as his position before his first game
-  # (STAT_RATE_LISTED_POS_PRIOR).
-  if (!is.null(rosters)) {
+  # (STAT_RATE_LISTED_POS_PRIOR). Not for team-sheet rosters (AFLW), where the
+  # "position" can be the slot he was named in for a later match.
+  if (!is.null(rosters) && isTRUE(rosters_are_listings)) {
     rdt <- data.table::as.data.table(rosters)
     if (all(c("player_id", "season", "position") %in% names(rdt))) {
       listed <- rdt[, .(player_id, .season = as.integer(season),

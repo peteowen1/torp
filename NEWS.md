@@ -1,6 +1,6 @@
 # torp 1.14.0
 
-* **Rating vintage v19** (`RATING_VINTAGE <- "v19"`): `STAT_RATE_LISTED_POS_PRIOR` is on, and in `.rating_defining_constants()`. A player with no games before a stat rating's reference date now starts from his club listing's position average instead of the league's. Only those rows move (2025: 2,007 of 32,538 stat-rating rows; debut-game miss 5.23 to 3.48 disposals, 2.19 to 0.68 hitouts), and through them PSR and TORP for debutants. Preserve v18 with `promote_rating_vintage.R` (PROMOTE_FROM=v18, PROMOTE_TO=v19) before this reaches `main`, then republish with `daily-ratings-predictions.yml -f seasons=TRUE`.
+* **Rating vintage v19** (`RATING_VINTAGE <- "v19"`): `STAT_RATE_LISTED_POS_PRIOR` is on, and in `.rating_defining_constants()`. A player with no games before a stat rating's reference date now starts from his club listing's position average instead of the league's. Only those rows move (2025: 2,007 of 32,538 stat-rating rows; debut-game miss 5.23 to 3.48 disposals, 2.19 to 0.68 hitouts), and through them PSR and TORP for debutants. AFLW is unchanged: its "rosters" are team sheets, whose position can come from a later match, so `.prepare_stat_rating_data()` gains `rosters_are_listings` and the AFLW path passes FALSE. Preserve v18 with `promote_rating_vintage.R` (PROMOTE_FROM=v18, PROMOTE_TO=v19) before this reaches `main`, then republish with `daily-ratings-predictions.yml -f seasons=TRUE`.
 
 # torp 1.13.2
 
