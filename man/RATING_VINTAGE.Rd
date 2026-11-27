@@ -260,5 +260,14 @@ predictions (torp#309); B69; 63 more constants tracked by the guard. The
 Preserve v17 with \code{data-raw/03-ratings/promote_rating_vintage.R}
 (PROMOTE_FROM=v17, PROMOTE_TO=v18) and move the manifest to canonical v18
 BEFORE this reaches main.
+
+v19 (2026-11-27): a player with no games before a stat rating's reference
+date takes his club listing's position prior instead of the league's
+(\code{STAT_RATE_LISTED_POS_PRIOR} on; torpverse docs/plans/STAT-PREDS-PLAN.md
+P5). Moves the stat ratings of players with no earlier games, and through
+them PSR and TORP. Preserve v18 with
+\code{data-raw/03-ratings/promote_rating_vintage.R} (PROMOTE_FROM=v18,
+PROMOTE_TO=v19) and move the manifest to canonical v19 BEFORE this reaches
+main.
 }
 \keyword{internal}
