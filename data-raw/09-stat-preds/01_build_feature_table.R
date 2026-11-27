@@ -15,6 +15,7 @@
 #   - team strength: his side's and the opponent's EPR (named lineup, as of
 #     the round) and as-of xRAPM;
 #   - travel: km from his and the opponent's home ground, interstate, team rest;
+#   - forecast weather as issued by T (2024 on; 02_fetch_forecast_weather.R);
 #   - context: home/away, venue.
 # Coverage is asserted on every column: a column under its floor stops the
 # build (CLAUDE.md: assert coverage, not presence).
@@ -159,7 +160,9 @@ ft[, epr_diff := team_epr - opp_epr]
 # match model does (.build_match_features()); clubs' home grounds did not move
 # in this window, so using later seasons for it reveals nothing about results.
 # Distance is great-circle km from home ground to venue, for him and the opponent.
-wx <- as.data.table(load_weather())[, .(match_id, home_team_name, lat = Latitude, lon = Longitude)]
+wx_k <- as.data.table(load_weather())[, .(match_id, home_team_name, lat = Latitude, lon = Longitude,
+                                          kickoff = as.POSIXct(kickoff_utc, tz = "UTC"))]
+wx <- wx_k[, .(match_id, home_team_name, lat, lon)]
 stopifnot(!anyDuplicated(wx$match_id), !anyNA(wx$lat), !anyNA(wx$lon))
 home_ground <- wx[, .N, by = .(team = home_team_name, lat, lon)][order(team, -N)][, .SD[1], by = team]
 say("home grounds found: ", nrow(home_ground), " teams")
@@ -177,6 +180,27 @@ setorder(tdays, team, match_date)
 tdays[, team_days_rest := as.numeric(match_date - shift(match_date)), by = team]
 ft <- merge(ft, tdays[, .(match_id, team, team_days_rest)], by = c("match_id", "team"), all.x = TRUE)
 
+# Forecast weather as of T (02_fetch_forecast_weather.R; Pete, 27 Nov 2026) ----
+# Not observed weather: that is not known at T. For each match the forecast
+# lead is the shortest one issued no later than T: N days with
+# kickoff - N x 24h <= ref_date (00:00 UTC), capped at the 7 days Open-Meteo
+# keeps. Matches before Feb 2024 have no such forecast and stay NA.
+fc_file <- file.path(out_dir, "forecast_weather.parquet")
+if (!file.exists(fc_file)) stop("run data-raw/09-stat-preds/02_fetch_forecast_weather.R first")
+fc <- as.data.table(arrow::read_parquet(fc_file))
+ko <- wx_k[, .(match_id, kickoff)]
+ft <- merge(ft, ko, by = "match_id", all.x = TRUE)
+stopifnot(!anyNA(ft$kickoff))
+ft[, fc_lead_days := pmin(7L, as.integer(ceiling(as.numeric(difftime(
+  kickoff, as.POSIXct(sr_ref_date, tz = "UTC"), units = "hours")) / 24)))]
+stopifnot(ft[, all(fc_lead_days >= 1L)])
+say("forecast lead (days before kickoff, issued by T): ", paste(names(table(ft$fc_lead_days)), table(ft$fc_lead_days), sep = ":", collapse = " "))
+n_capped <- ft[as.numeric(difftime(kickoff, as.POSIXct(sr_ref_date, tz = "UTC"), units = "hours")) > 7 * 24, uniqueN(match_id)]
+say("matches where T is over 7 days before kickoff (lead capped at 7, so the forecast is a little after T): ", n_capped)
+ft <- merge(ft, fc[, .(match_id, fc_lead_days = lead_days, fc_temp, fc_precip, fc_wind, fc_humidity)],
+            by = c("match_id", "fc_lead_days"), all.x = TRUE)
+ft[, kickoff := NULL]
+
 # Coverage: assert, don't assume ----
 # Floors: what can legitimately be missing. A debut has no form or days-since
 # (games_before == 0); the first match of a team in 2021 has no conceded window;
@@ -186,6 +210,13 @@ cov <- data.table(column = names(ft), coverage = vapply(ft, function(x) mean(!is
 cov[, floor := 0.999]
 cov[grepl("_last[135]$|^tog_last|days_since_last", column), floor := 0.97]
 cov[column == "team_days_rest", floor := 0.99]  # NA only on each team's first match
+# Forecast weather exists from Feb 2024 only; checked by season instead.
+cov[grepl("^fc_(temp|precip|wind|humidity)$", column), floor := 0]
+for (s in c("fc_temp", "fc_precip", "fc_wind", "fc_humidity")) {
+  cs <- ft[, .(cov = mean(!is.na(get(s)))), by = season][order(season)]
+  say(s, " coverage by season: ", paste(sprintf("%d %.3f", cs$season, cs$cov), collapse = ", "))
+  stopifnot(cs[season >= 2024, all(cov >= 0.99)], cs[season <= 2023, all(cov == 0)])
+}
 cov[grepl("^opp_conc_ratio_|^team_rate_ratio_", column), floor := 0.99]
 cov[grepl("^sr_", column), floor := 0.99]
 cov[column %in% c("lineup_position", "named_pos_group", "venue_name"), floor := 0.99]
