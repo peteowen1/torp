@@ -1,3 +1,7 @@
+# torp 1.13.2
+
+* The nightly data release (`data-raw/01-data/daily_release.R`) now also publishes next season's fixture to `fixtures-data` (`fixtures_<season + 1>.parquet`) whenever the AFL API has it, every night and in the off-season too, and only when the schedule changed (match, round, start time, status, venue and team ids). Before, it wrote only `get_afl_season()`'s fixture and skipped everything in the off-season, so the 2027 fixture (out 28 Oct 2026) was not on the release; fplverse reads its AFL schedule from it. A season the API does not have yet is logged, not failed; a failed upload is reported as `next_season_fixtures`. Package code is unchanged.
+
 # torp 1.13.1
 
 * Stat ratings can give a player with no games yet his club listing's position, so his prior is his position's average rather than the league's (new switch `STAT_RATE_LISTED_POS_PRIOR`, **off**: published numbers are unchanged until a rating vintage turns it on). `.prepare_stat_rating_data()` now records `listed_pos_group` per (player, season) from the rosters; the estimators use the reference season's listing, else an earlier one, never a later one. Measured on the 2025 data with the switch on: only the 2,007 of 32,538 rating rows with no games before them move, and on the 100 debut games the average miss falls from 5.23 to 3.48 disposals and 2.19 to 0.68 hitouts (no core stat gets worse). torpverse `docs/plans/STAT-PREDS-PLAN.md` P5.
