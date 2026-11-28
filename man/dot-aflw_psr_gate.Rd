@@ -13,7 +13,7 @@
 \code{list(skip, reason)}.
 }
 \description{
-Fetches what �de{.aflw_psr_gate_decision()} needs and returns its answer. Any
+Fetches what \code{.aflw_psr_gate_decision()} needs and returns its answer. Any
 error resolves to run. Set the environment variable
 \code{TORP_FORCE_AFLW_PSR=true} to rebuild regardless (after retraining the
 AFLW coefficients, for example).

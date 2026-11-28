@@ -770,7 +770,9 @@ tictoc::tic("stage_7_aflw_psr")
 # rebuild and upload when the published files already cover the last match
 # (R/aflw_psr_gate.R; anything it cannot establish runs). The message below is
 # the proof of which way it went. TORP_FORCE_AFLW_PSR=true rebuilds regardless.
-aflw_gate <- torp:::.aflw_psr_gate()
+aflw_gate <- tryCatch(torp:::.aflw_psr_gate(), error = function(e) {
+  list(skip = FALSE, reason = paste("gate unavailable:", conditionMessage(e)))
+})
 cli::cli_inform("Stage 7 AFLW PSR gate: {if (isTRUE(aflw_gate$skip)) 'SKIP' else 'RUN'} -- {aflw_gate$reason}")
 
 tryCatch({
