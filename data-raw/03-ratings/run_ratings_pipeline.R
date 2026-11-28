@@ -766,10 +766,19 @@ tictoc::toc(log = TRUE)
 cli::cli_h2("Stage 7: Compute & Release AFLW PSR")
 tictoc::tic("stage_7_aflw_psr")
 
-tryCatch({
-  aflw_psr_all <- torp:::.compute_aflw_psr(TRUE)
+# The result can only change when an AFLW match is played, so skip the ~2 min
+# rebuild and upload when the published files already cover the last match
+# (R/aflw_psr_gate.R; anything it cannot establish runs). The message below is
+# the proof of which way it went. TORP_FORCE_AFLW_PSR=true rebuilds regardless.
+aflw_gate <- torp:::.aflw_psr_gate()
+cli::cli_inform("Stage 7 AFLW PSR gate: {if (isTRUE(aflw_gate$skip)) 'SKIP' else 'RUN'} -- {aflw_gate$reason}")
 
-  if (is.null(aflw_psr_all) || nrow(aflw_psr_all) == 0) {
+tryCatch({
+  aflw_psr_all <- if (isTRUE(aflw_gate$skip)) NULL else torp:::.compute_aflw_psr(TRUE)
+
+  if (isTRUE(aflw_gate$skip)) {
+    cli::cli_alert_info("AFLW PSR not rebuilt: published files are current")
+  } else if (is.null(aflw_psr_all) || nrow(aflw_psr_all) == 0) {
     cli::cli_warn("AFLW PSR returned no rows - skipping AFLW PSR release")
   } else {
     cli::cli_inform("AFLW PSR computed for {nrow(aflw_psr_all)} player-rounds across {length(unique(aflw_psr_all$season))} seasons")
