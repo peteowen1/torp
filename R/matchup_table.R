@@ -93,6 +93,9 @@
 #' @param season Season year (default: current via \code{get_afl_season()})
 #' @param week Round number used for the roster/injury-adjusted snapshot
 #'   (default: next round via \code{get_afl_week("next")})
+#' @param prebuilt Optional state saved by \code{.save_match_state_handoff()}
+#'   and returned by \code{.load_match_state_handoff()}. When given, no models
+#'   are fitted and its own margin calibration is used.
 #' @return A list with \code{team_mdl_df} (fully featured + blended +
 #'   calibrated -- and it genuinely is calibrated now; before the migration
 #'   this docstring said so while the frame was not, because the sidecar was
@@ -107,7 +110,7 @@
 #'   onto synthetic rows and calibrates those -- but anything that starts
 #'   reading it must not calibrate again.
 #' @keywords internal
-.freeze_match_state <- function(season = NULL, week = NULL) {
+.freeze_match_state <- function(season = NULL, week = NULL, prebuilt = NULL) {
   if (is.null(season)) season <- get_afl_season()
   if (is.null(week)) week <- get_afl_week(type = "next")
 
@@ -122,8 +125,16 @@
   # refresh_results = FALSE preserves what this function has always done:
   # it never refreshed results from the AFL API, so passing TRUE would be
   # a behaviour change, not a migration.
-  state <- build_prediction_state(week = week, season = season,
-                                  refresh_results = FALSE)
+  #
+  # `prebuilt` skips the build: it is the state run_predictions_pipeline()
+  # saved minutes earlier in the same workflow run, already checked by
+  # .load_match_state_handoff() to be for this season and round.
+  state <- if (!is.null(prebuilt)) {
+    prebuilt
+  } else {
+    build_prediction_state(week = week, season = season,
+                           refresh_results = FALSE)
+  }
 
   # NULL means no TORP ratings for that round yet. Exactly the contract
   # that bit run_predictions_pipeline() on 2026-08-11: NULL$anything is
@@ -170,7 +181,11 @@
   weather_candidates <- c("log_wind", "log_precip", "temp_avg", "humidity_avg", "is_roof")
   xgb_weather_cols <- if (all(weather_candidates %in% names(team_mdl_df))) weather_candidates else character(0)
 
-  margin_calib <- load_match_margin_calibration()
+  # A prebuilt state carries the sidecar its pred_score_diff was calibrated
+  # with. The predictions step refits and re-uploads the sidecar AFTER
+  # building its state, so loading from the release here would pair the
+  # state's stored predictions with a different calibration.
+  margin_calib <- if (!is.null(prebuilt)) prebuilt$margin_calib else load_match_margin_calibration()
 
   cli::cli_alert_success("build_matchup_table: frozen state ready ({nrow(team_mdl_df)} team_mdl_df rows)")
 

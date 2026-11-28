@@ -840,6 +840,10 @@ build_prediction_state <- function(week = NULL, weeks = NULL, season = NULL,
       all_grounds       = all_grounds,
       gam_result        = gam_result,
       xgb_result        = xgb_result,
+      # The sidecar team_mdl_df$pred_score_diff was calibrated with. Carried so
+      # a caller that reuses this state (the matchup step's hand-over) scores
+      # with the same one, not whatever is on the release by then.
+      margin_calib      = margin_calib,
       validation_errors = validation_errors,
       pipeline_start    = .pipeline_start
     )
@@ -1234,6 +1238,11 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       validation_errors = state$validation_errors
     )))
   }
+
+  # Saved before the uploads so the matchup step of the same workflow run can
+  # reuse this state and skip a second fit. No-op unless
+  # TORP_MATCH_STATE_HANDOFF is set; never throws (R/match_state_handoff.R).
+  .save_match_state_handoff(state)
 
 
   # Upload ----

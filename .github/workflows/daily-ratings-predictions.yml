@@ -281,6 +281,9 @@ jobs:
       - name: Build match predictions
         env:
           WEEK_OVERRIDE: ${{ inputs.week_override }}
+          # The matchup step below reuses the state fitted here instead of
+          # fitting the match models a second time (R/match_state_handoff.R).
+          TORP_MATCH_STATE_HANDOFF: ${{ runner.temp }}/match_state_handoff.rds
         run: |
           Rscript -e "
             devtools::load_all()
@@ -299,6 +302,7 @@ jobs:
         id: matchup_table
         continue-on-error: true
         env:
+          TORP_MATCH_STATE_HANDOFF: ${{ runner.temp }}/match_state_handoff.rds
           GITHUB_PAT: ${{ secrets.WORKFLOW_PAT }}
           GH_TOKEN: ${{ secrets.WORKFLOW_PAT }}
         run: |

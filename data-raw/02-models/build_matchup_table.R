@@ -72,7 +72,23 @@ if (torp:::.matchup_season_is_over(fx, week)) {
   quit(save = "no", status = 0)
 }
 
-state <- torp:::.freeze_match_state(season = season, week = week)
+# Reuse the state the predictions step fitted minutes ago in this same
+# workflow run, when there is one for this season and round; otherwise build
+# it here as before (R/match_state_handoff.R). Gate 1 below runs either way.
+handoff <- torp:::.load_match_state_handoff(season, week)
+state <- NULL
+if (isTRUE(handoff$reuse)) {
+  state <- tryCatch(
+    torp:::.freeze_match_state(season = season, week = week, prebuilt = handoff$state),
+    error = function(e) {
+      handoff$reuse <<- FALSE
+      handoff$reason <<- paste("saved state rejected:", conditionMessage(e))
+      NULL
+    }
+  )
+}
+cat(sprintf("Matchup state: %s -- %s\n", if (isTRUE(handoff$reuse)) "REUSED" else "REBUILT", handoff$reason))
+if (is.null(state)) state <- torp:::.freeze_match_state(season = season, week = week)
 
 # ---- Gate 1: the fabricated predict path still agrees with production -------
 # Restricted to rows NOT YET PLAYED (win is NA), not just this round's rows.
