@@ -1,3 +1,7 @@
+# torp 1.14.1
+
+* The ratings pipeline (`data-raw/03-ratings/run_ratings_pipeline.R`, Stage 7) no longer rebuilds and re-uploads AFLW PSR on every men's run when nothing can have changed. New internal `.aflw_psr_gate()` skips it only when every AFLW season's file on `aflw_psr-data` was uploaded at least 3 days after the last concluded AFLW match and is under 30 days old; anything it cannot read rebuilds as before, and `TORP_FORCE_AFLW_PSR=true` rebuilds regardless (use it after retraining the AFLW coefficients). The log prints `Stage 7 AFLW PSR gate: SKIP|RUN` with the reason. Saves about 2 minutes a run (121 s and 128 s measured on two November 2026 runs). Published numbers are unchanged.
+
 # torp 1.14.0
 
 * **Rating vintage v19** (`RATING_VINTAGE <- "v19"`): `STAT_RATE_LISTED_POS_PRIOR` is on, and in `.rating_defining_constants()`. A player with no games before a stat rating's reference date now starts from his club listing's position average instead of the league's. Only those rows move (2025: 2,007 of 32,538 stat-rating rows; debut-game miss 5.23 to 3.48 disposals, 2.19 to 0.68 hitouts), and through them PSR and TORP for debutants. AFLW is unchanged: its "rosters" are team sheets, whose position can come from a later match, so `.prepare_stat_rating_data()` gains `rosters_are_listings` and the AFLW path passes FALSE. Preserve v18 with `promote_rating_vintage.R` (PROMOTE_FROM=v18, PROMOTE_TO=v19) before this reaches `main`, then republish with `daily-ratings-predictions.yml -f seasons=TRUE`.
